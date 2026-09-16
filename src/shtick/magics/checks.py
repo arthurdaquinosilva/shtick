@@ -96,7 +96,7 @@ def _shebang_kind(source: str) -> str | None:
              "It's a working-directory sandbox, not a security boundary: absolute paths and cd reach outside.")
 def m_sandbox(shell: Shell, args: str):
     from shtick.sandbox import Sandbox
-    from shtick.shell import short_path
+    from shtick.paths import short_path
 
     found, words = take_flags(split_args(args), "-c", "--copy")
     copy = bool(found)
@@ -276,7 +276,7 @@ def m_save_test(shell: Shell, args: str):
         path.chmod(0o755)
     except OSError as e:
         raise MagicError(f"can't write {words[0]}: {e.strerror or e}") from None
-    from shtick.shell import short_path
+    from shtick.paths import short_path
 
     n = sum(len(c.expectations) for c in tf.cells)
     shell.print(Text.assemble(("✓ ", "shtick.ok"), (f"wrote {words[0]}", "shtick.fg"), (f"  {len(tf.cells)} cells · {n} expectations", "shtick.muted")))

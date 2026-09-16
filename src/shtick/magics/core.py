@@ -133,7 +133,7 @@ def m_config(shell: Shell, args: str):
             table.add_row(f.name, repr(getattr(shell.settings, f.name)))
         shell.print(table)
         if shell.profile:
-            from shtick.shell import short_path
+            from shtick.paths import short_path
 
             shell.print(Text(f"saved defaults live in {short_path(shell.profile.config_file)}", style="shtick.faint"))
         return

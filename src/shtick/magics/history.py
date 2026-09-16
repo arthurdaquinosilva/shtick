@@ -95,7 +95,7 @@ def m_save(shell: Shell, args: str):
         path.chmod(path.stat().st_mode | 0o111)
     except OSError as e:
         raise MagicError(f"can't write {target}: {e.strerror or e}") from None
-    from shtick.shell import short_path
+    from shtick.paths import short_path
 
     shell.print(Text.assemble(("✓ ", "shtick.ok"), (f"wrote {target}", "shtick.fg"), (f"  {len(entries)} cells · {shebang}", "shtick.muted")))
     shell.print(Text(f"in {short_path(path.parent)}", style="shtick.faint"), no_wrap=True, overflow="ellipsis")

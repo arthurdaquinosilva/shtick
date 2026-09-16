@@ -61,7 +61,8 @@ from shtick.banner import wordmark
 from shtick.completer import FlagHinter, ShtickCompleter
 from shtick.history import PromptHistory
 from shtick.output import format_duration
-from shtick.shell import Shell, short_path
+from shtick.paths import short_path
+from shtick.shell import Shell
 from shtick.syntax import has_prompts, is_complete, strip_prompts
 
 INDENT = "  "

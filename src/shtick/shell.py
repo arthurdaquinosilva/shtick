@@ -22,6 +22,7 @@ from shtick.config import Profile, Settings
 from shtick.engine import CellResult, Session, ShellNotFound
 from shtick.history import HistoryManager
 from shtick.magics import MAGICS, MagicError
+from shtick.paths import fit_path, short_path
 from shtick.output import LineInput, Rail, RailState, Spinner, format_duration
 from shtick.syntax import MAGIC_RE
 from shtick.theme import PALETTES, Theme, get_theme
@@ -30,14 +31,6 @@ if TYPE_CHECKING:
     from shtick.sandbox import Changes, Sandbox
     from shtick.scripts import Script
     from shtick.testing import Expectation
-
-
-def short_path(path: str | os.PathLike) -> str:
-    path = str(path)
-    home = os.path.expanduser("~")
-    if path == home or path.startswith(home + os.sep):
-        path = "~" + path[len(home):]
-    return path
 
 
 @contextmanager
@@ -60,13 +53,6 @@ def keys_one_by_one(fd: int, enabled: bool = True) -> Iterator[None]:
         yield
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
-
-
-def fit_path(path: str, width: int) -> str:
-    """Shorten a path from the left so it fits: …/project/src."""
-    if len(path) <= width or width < 8:
-        return path
-    return "…" + path[len(path) - width + 1:]
 
 
 @dataclass
@@ -110,6 +96,7 @@ class Shell:
         self._magic_depth = 0
         self._magic_cells = 0
         self.interactive = sys.__stdout__.isatty() and sys.__stdin__.isatty()
+        self.vars_baseline = None
         self._run_startup()
 
     # ── consoles, settings, sessions ──────────────────────────────────────
@@ -132,10 +119,16 @@ class Shell:
             return Session("bash", cwd=cwd, tty=self.settings.tty)
 
     def _run_startup(self) -> None:
+        """Every new session (start, restart, %shell, after the shell exited): startup lines, %vars baseline."""
+        from shtick.magics.inspect import snapshot
+
         for line in self.settings.startup:
             result = self.session.query(line)
             if result.exit != 0:
                 self.warn(f"startup line failed (exit {result.status}): {line}")
+        if self.session.kind == "zsh":
+            snapshot(self.session)  # the first listing makes zsh autoload a few parameters (LOGCHECK, WATCHFMT…)
+        self.vars_baseline = snapshot(self.session)
 
     def switch_shell(self, shell: str) -> None:
         cwd = self.session.cwd

@@ -8,6 +8,7 @@ import sys
 import pytest
 
 from shtick import lint, testing
+from shtick.config import Settings
 from shtick.completer import command_words, parse_options
 from shtick.sandbox import Sandbox
 
@@ -373,3 +374,61 @@ def test_command_words():
     assert words("sudo LC_ALL=C grep -r -") == ("grep", ["-r"], "-")
     assert words("ls | wc -l") == ("wc", [], "-l")
     assert words("./run.sh -x") is None  # never look up local scripts
+
+
+# ── %vars & %compare ──────────────────────────────────────────────────────
+
+
+def test_vars_shows_changes(any_shell, capfd):
+    run(any_shell, 'x=41; multi="a\nb"; f() { echo hi; }; unset LOGNAME')
+    capfd.readouterr()
+    any_shell.run_cell("%vars")
+    out = capfd.readouterr().out
+    assert "+ x=" in out and "+ multi=" in out and "− LOGNAME" in out
+    assert "RANDOM" not in out and "__shtick" not in out
+    if any_shell.session.kind in ("bash", "zsh"):
+        assert "+ f()" in out
+    else:
+        assert "can't list functions" in out
+
+
+def test_vars_redefined_function(tmp_path, monkeypatch, capfd):
+    from shtick.shell import Shell
+
+    monkeypatch.chdir(tmp_path)
+    sh = Shell(Settings(startup=["greet() { echo hi; }"]), cwd=str(tmp_path))
+    try:
+        run(sh, "greet() { echo hello; }")
+        capfd.readouterr()
+        sh.run_cell("%vars")
+        assert "~ greet()  redefined" in capfd.readouterr().out
+    finally:
+        sh.close()
+
+
+def test_vars_baseline_resets_with_the_session(shell, capfd):
+    run(shell, "x=1", "exit 1")
+    capfd.readouterr()
+    shell.run_cell("%vars")
+    assert "nothing defined or changed" in capfd.readouterr().out
+
+
+def test_compare(shell, capfd):
+    if not shutil.which("dash"):
+        pytest.skip("dash not installed")
+    shell.run_cell('%compare bash dash -- [[ 1 == 1 ]] && echo double')
+    out = capfd.readouterr().out
+    assert "differs in status, stdout, stderr" in out
+    assert "double" in out and "cell-" not in out
+    shell.run_cell("%compare bash dash -- echo same")
+    assert "same exit status and output" in capfd.readouterr().out
+
+
+def test_compare_previous_cell_with_body(shell, capfd):
+    if not shutil.which("dash"):
+        pytest.skip("dash not installed")
+    run(shell, "echo from-cell")
+    shell.run_cell("%compare bash dash")
+    assert "from-cell" in capfd.readouterr().out
+    shell.run_cell("%compare bash dash\necho body-line")
+    assert "body-line" in capfd.readouterr().out

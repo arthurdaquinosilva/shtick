@@ -173,7 +173,8 @@ class Flag:
 
 # Lines documenting options in man pages and --help output:
 #   -x      Extract to disk…         -f file, --file file       -C, --context=NUM   print NUM lines…
-_OPT_LINE = re.compile(r"^\s{1,12}(?P<spec>-{1,2}[A-Za-z0-9?#@][^\s,]*(?:[ =][^\s,-][^\s,]*)?(?:,\s*-{1,2}[A-Za-z0-9][^\s,]*(?:[ =][^\s,-][^\s,]*)?)*)(?:\s{2,}|\t\s*|\s*$)(?P<text>.*)$")
+_ARG = r"(?:[ =][^\s-](?:[^\s,]|,(?!\s*-))*)?"  # an argument may contain commas: CODE1[,CODE2...]
+_OPT_LINE = re.compile(rf"^\s{{1,12}}(?P<spec>-{{1,2}}[A-Za-z0-9?#@][^\s,=\[]*(?:\[[^\]\s]*\])?{_ARG}(?:,\s*-{{1,2}}[A-Za-z0-9][^\s,=\[]*(?:\[[^\]\s]*\])?{_ARG})*)(?:\s{{2,}}|\t\s*|\s*$)(?P<text>.*)$")
 SYSTEM_BIN_DIRS = ("/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/opt/homebrew/bin", "/opt/homebrew/sbin",
                    "/home/linuxbrew/.linuxbrew/bin", "/nix/var/nix/profiles/default/bin", "/run/current-system/sw/bin")
 
@@ -193,7 +194,7 @@ def parse_options(text: str) -> dict[str, Flag]:
         if not m:
             continue
         names, arg = [], ""
-        for part in re.split(r",\s*", m["spec"]):
+        for part in re.split(r",\s*(?=-)", m["spec"]):
             pieces = re.split(r"[ =]", part, maxsplit=1)
             name = pieces[0]
             if "[" in name:  # -C[WHEN], --color[=WHEN]
