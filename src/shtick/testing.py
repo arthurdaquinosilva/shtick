@@ -157,7 +157,7 @@ def parse(text: str) -> Expectation:
 
         if op == "exists" and len(args) == 1:
             test = os.path.isdir if head == "dir" else os.path.isfile
-            return Expectation(canonical, lambda c: Outcome(test(path(c, args[0])), f"no {head} at {args[0]}"))
+            return Expectation(canonical, lambda c: Outcome(test(path(c, args[0])), f"no {head} {args[0]}"))
         if op == "missing" and len(args) == 1:
             return Expectation(canonical, lambda c: Outcome(not os.path.lexists(path(c, args[0])), f"{args[0]} exists"))
         if head == "file" and op == "contains" and len(args) == 2:
@@ -186,7 +186,7 @@ def parse(text: str) -> Expectation:
 
             def changed(c: Context) -> Outcome:
                 if c.changes is None:
-                    return Outcome(False, "the sandbox was off")
+                    return Outcome(False, "the sandbox off")
                 paths = [p.rstrip("/") for p in c.changes.added + c.changes.modified + c.changes.deleted]
                 return Outcome(target in paths, _changes(c))
 
@@ -198,7 +198,7 @@ def parse(text: str) -> Expectation:
 
 def _changes(c: Context) -> str:
     if c.changes is None:
-        return "the sandbox was off"
+        return "the sandbox off"
     ch = c.changes
     parts = [f"+{p}" for p in ch.added] + [f"~{p}" for p in ch.modified] + [f"-{p}" for p in ch.deleted]
     return "changes: " + (" ".join(parts) if parts else "none")

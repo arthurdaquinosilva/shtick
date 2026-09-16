@@ -11,7 +11,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from shtick.history import Entry
-from shtick.magics import MagicError, magic, parse_args, split_args
+from shtick.magics import MagicError, magic, parse_args, split_args, take_flags
 
 if TYPE_CHECKING:
     from shtick.shell import Shell
@@ -68,13 +68,12 @@ def m_history(shell: Shell, args: str):
        "-a   include cells that failed\n-f   overwrite FILE\n\n"
        "The script starts with a shebang for the session's shell (setting: save_shebang) and is made executable.")
 def m_save(shell: Shell, args: str):
-    opts, rest = parse_args(args, "af", "all", "force")
-    words = split_args(rest)
+    flags, words = take_flags(split_args(args), "-a", "--all", "-f", "--force", "-af", "-fa")
     if not words:
         raise MagicError("usage: %save FILE [range] [-a] [-f]")
     target, spec = words[0], " ".join(words[1:])
     statuses = shell.history.statuses()
-    include_failed = bool(opts.get("a") or opts.get("all"))
+    include_failed = bool(flags & {"-a", "--all", "-af", "-fa"})
     if spec:
         entries = [e for e in _entries(shell, spec) if not _is_command(e.source)]
     else:
@@ -87,7 +86,7 @@ def m_save(shell: Shell, args: str):
     path = Path(shell.session.cwd, os.path.expanduser(target))
     if shell.sandbox is not None and not os.path.isabs(os.path.expanduser(target)):
         path = Path(shell.sandbox.source, os.path.expanduser(target))  # don't save into the throwaway directory
-    if path.exists() and not (opts.get("f") or opts.get("force")):
+    if path.exists() and not flags & {"-f", "--force", "-af", "-fa"}:
         raise MagicError(f"{target} exists — %save {target} ... -f to overwrite")
     shebang = shell.settings.save_shebang or _shebang(shell)
     body = "\n\n".join(e.source.rstrip("\n") for e in entries)
@@ -98,8 +97,8 @@ def m_save(shell: Shell, args: str):
         raise MagicError(f"can't write {target}: {e.strerror or e}") from None
     from shtick.shell import short_path
 
-    shell.print(Text.assemble(("✓ ", "shtick.ok"), (f"wrote {short_path(path)}", "shtick.fg"),
-                              (f"  {len(entries)} cells", "shtick.muted")))
+    shell.print(Text.assemble(("✓ ", "shtick.ok"), (f"wrote {target}", "shtick.fg"), (f"  {len(entries)} cells · {shebang}", "shtick.muted")))
+    shell.print(Text(f"in {short_path(path.parent)}", style="shtick.faint"), no_wrap=True, overflow="ellipsis")
     if skipped and not include_failed:
         shell.print(Text(f"left out {len(skipped)} failed cells: " + ", ".join(str(e.line) for e in skipped) + " — -a includes them",
                          style="shtick.faint"))

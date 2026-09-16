@@ -40,16 +40,21 @@ class TraceLine:
     depth: int
     command: str
 
-    def location(self, run_number: int, cell_numbers: dict[int, int] | None = None) -> str:
-        """`4` inside this cell, `[2]:4` in an earlier cell, `lib.sh:4` in a sourced file.
+    def location(self, run_number: int, origin: Callable[[int, int], str | None] | None = None) -> str:
+        """`4` inside this cell, `[2]:4` in an earlier cell, `deploy.sh:9` for code that came from a
+        script, `lib.sh:4` in a sourced file.
 
-        Files are named after the engine's run number; cell_numbers maps those to the cell numbers
-        the user sees."""
-        if not self.file or self.file == f"cell-{run_number}.sh":
-            return str(self.line)
-        if m := re.fullmatch(r"cell-(\d+)\.sh", self.file):
-            n = (cell_numbers or {}).get(int(m[1]))
-            return f"[{n}]:{self.line}" if n is not None else f"cell:{self.line}"
+        Cell files are named after the engine's run number; origin(run_number, line) names where
+        that code came from (None: unknown)."""
+        m = re.fullmatch(r"cell-(\d+)\.sh", self.file)
+        run = int(m[1]) if m else run_number if not self.file else None
+        if run is not None:
+            named = origin(run, self.line) if origin else None
+            if named:
+                return named
+            if run == run_number:
+                return str(self.line)
+            return f"cell:{self.line}"
         return f"{self.file}:{self.line}"
 
 
@@ -78,7 +83,9 @@ def select(lines: list[TraceLine], cell_number: int) -> list[TraceLine]:
         if _DRIVER.match(t.command):
             continue
         kept.append(t)
-    return kept
+    # zsh prints `x=` before tracing the command substitution in `x=$(…)`, then `x=value`
+    return [t for i, t in enumerate(kept)
+            if not (re.fullmatch(r"[A-Za-z_]\w*=", t.command) and any(u.command.startswith(t.command) and u.command != t.command for u in kept[i + 1:]))]
 
 
 class TraceSplitter:

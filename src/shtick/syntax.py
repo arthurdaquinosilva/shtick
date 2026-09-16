@@ -34,15 +34,18 @@ def _trailing_backslash(text: str) -> bool:
     return (len(line) - len(line.rstrip("\\"))) % 2 == 1
 
 
-@lru_cache(maxsize=1)
-def _checker() -> str | None:
+@lru_cache(maxsize=4)
+def _checker(kind: str = "bash") -> str | None:
+    if kind == "zsh" and shutil.which("zsh"):
+        return shutil.which("zsh")
     return shutil.which("bash") or shutil.which("sh")
 
 
 @lru_cache(maxsize=256)
-def parse_check(code: str) -> tuple[bool, str]:
-    """(parses_ok, message) from `bash -n`. The warning for an unterminated heredoc counts as not ok."""
-    shell = _checker()
+def parse_check(code: str, kind: str = "bash") -> tuple[bool, str]:
+    """(parses_ok, message) from `<shell> -n` (zsh for zsh sessions, bash otherwise).
+    bash's warning for an unterminated heredoc counts as not ok."""
+    shell = _checker(kind)
     if shell is None:
         return True, ""
     fd, path = tempfile.mkstemp(prefix="shtick-check-", suffix=".sh")
@@ -58,17 +61,30 @@ def parse_check(code: str) -> tuple[bool, str]:
     return proc.returncode == 0 and "delimited by end-of-file" not in message, message
 
 
-def is_unfinished(code: str) -> bool:
+_ZSH_LINE = re.compile(r":(\d+): ")
+_TRAILING_OPERATOR = re.compile(r"(\|\||&&|\|)\s*$")
+
+
+def is_unfinished(code: str, kind: str = "bash") -> bool:
     """True when more lines are needed: open blocks, quotes, heredocs, trailing \\ | && ||."""
     if not code.strip():
         return False
     if _trailing_backslash(code):
         return True
+    if kind == "zsh" and _checker("zsh") != _checker("bash"):
+        if _TRAILING_OPERATOR.search(code.split("\n")[-1].split(" #")[0]) or is_heredoc_open(code):
+            return True  # zsh -n accepts both
+        ok, message = parse_check(code, "zsh")
+        if ok:
+            return False
+        m = _ZSH_LINE.search(message)
+        # zsh reports running out of input as an error on the line after the last one
+        return "unmatched" in message or bool(m and int(m[1]) > code.rstrip("\n").count("\n") + 1)
     ok, message = parse_check(code)
     return not ok and any(marker in message for marker in _UNFINISHED)
 
 
-def is_complete(text: str) -> bool:
+def is_complete(text: str, kind: str = "bash") -> bool:
     """Should pressing Enter run this input (True) or insert a newline (False)?"""
     if not text.strip():
         return True
@@ -77,11 +93,11 @@ def is_complete(text: str) -> bool:
         if not rest:
             return not _trailing_backslash(first)
         # `%trace` and friends take a body on the following lines
-        return not is_unfinished(rest)
+        return not is_unfinished(rest, kind)
     lines = text.split("\n")
     if len(lines) > 1 and not lines[-1].strip() and not is_heredoc_open(text):
         return True  # a blank last line always submits (unless it's inside a heredoc)
-    return not is_unfinished(text)
+    return not is_unfinished(text, kind)
 
 
 def is_heredoc_open(text: str) -> bool:

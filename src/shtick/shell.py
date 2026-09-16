@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import os
+import re
 import signal
 import sys
 import termios
@@ -95,7 +96,7 @@ class Shell:
         self.session = self._new_session(self.settings.shell, self.start_dir)
         self.count = 0
         self.cells: list[Cell] = []
-        self.cell_numbers: dict[int, int] = {}  # engine run number → cell number
+        self.origins: dict[int, tuple[int, str, int]] = {}  # engine run number → (cell number, script name, first line)
         self.next_input = ""
         self.last_duration: float | None = None
         self.last_status: int | None = None
@@ -205,10 +206,16 @@ class Shell:
             return None
         step, self.step_pending = self.step_pending, None
         label = ""
+        source = None
         if step is not None and self.script is not None and step < len(self.script.chunks):
             label = self.script.label(step)
+            chunk = self.script.chunks[step]
+            if text == chunk.code:
+                source = (self.script.name, chunk.start)
+            else:
+                label += "  · edited"
             self.script.pos = step + 1
-        return self.execute(text, label=label)
+        return self.execute(text, label=label, source=source)
 
     def run_magic(self, name: str, args: str, source: str) -> Any:
         self.echo(source)
@@ -259,7 +266,24 @@ class Shell:
             self.print(Text.assemble(("  ", ""), ("▸ ", "shtick.accent"), (label, "shtick.label")))
         self.print(grid)
 
-    def execute(self, code: str, label: str = "", trace: bool = False, echo: bool = True, record: bool = True) -> Cell:
+    def run_setup(self, code: str, label: str) -> CellResult:
+        """Run bookkeeping code the user didn't type (e.g. %open's `set -- args`) without drawing a
+        block, but record it so %test and saved tests replay it."""
+        result = self.session.run(code)
+        self.cells.append(Cell(0, code, result, label))
+        return result
+
+    def origin(self, run: int, line: int, current: int | None = None) -> str | None:
+        """Where line `line` of engine run `run` came from, for trace locations."""
+        if run not in self.origins:
+            return None
+        n, script, first = self.origins[run]
+        if script:
+            return f"{script}:{first + line - 1}"
+        return None if run == current else f"[{n}]:{line}"
+
+    def execute(self, code: str, label: str = "", trace: bool = False, echo: bool = True, record: bool = True,
+                source: tuple[str, int] | None = None) -> Cell:
         """Run shell code as a numbered cell and draw it: echo, railed output, footer."""
         code = code.strip("\n")
         if self._magic_depth:
@@ -290,8 +314,24 @@ class Shell:
             ),
         )
         rail = Rail(sys.__stdout__, state, spinner)
-        splitter = tracing.TraceSplitter(rail.write) if trace else None
-        on_output = splitter.feed if splitter else rail.write
+        run_number = self.session.count + 1
+        cell_file = re.compile(r"cell-(\d+)\.sh")
+
+        def cell_names(stream: str, text: str) -> None:
+            """Error messages name the engine's temp files (cell-12.sh): show the cell numbers instead."""
+            if "cell-" in text:
+                text = cell_file.sub(lambda m: f"[{n}]" if int(m[1]) == run_number else f"[{self.origins[int(m[1])][0]}]"
+                                     if int(m[1]) in self.origins else m[0], text)
+            rail.write(stream, text)
+
+        shown: list[tuple[str, str]] = []
+
+        def forward_shown(stream: str, text: str) -> None:
+            shown.append((stream, text))
+            cell_names(stream, text)
+
+        splitter = tracing.TraceSplitter(forward_shown) if trace else None
+        on_output = splitter.feed if splitter else cell_names
         run_code = tracing.wrap(code, self.session.kind) if trace else code
 
         interactive_input = sys.__stdin__.isatty()
@@ -316,8 +356,12 @@ class Shell:
         result.code = code
         if trace:
             self.session.query(tracing.UNWRAP)
+            # what the cell printed, without the trace lines (expectations check this)
+            result.events = shown
+            result.stdout = "".join(t for st, t in shown if st == "out")
+            result.stderr = "".join(t for st, t in shown if st == "err")
 
-        self.cell_numbers[result.number] = n
+        self.origins[result.number] = (n, *(source or ("", 0)))
         cell = Cell(n, code, result, label)
         if self.sandbox is not None:
             cell.sandbox = "copy" if self.sandbox.copied else "empty"
@@ -353,7 +397,7 @@ class Shell:
         if not wrote:
             self.rail_line()
         self.rail_line(("trace", "shtick.muted.bold"), (f" · {len(cell.trace)} commands", "shtick.faint"))
-        locations = [t.location(cell.result.number, self.cell_numbers) for t in cell.trace]
+        locations = [t.location(cell.result.number, lambda run, line: self.origin(run, line, cell.result.number)) for t in cell.trace]
         width = max(len(loc) for loc in locations)
         base = min(t.depth for t in cell.trace)
         for t, loc in zip(cell.trace, locations):

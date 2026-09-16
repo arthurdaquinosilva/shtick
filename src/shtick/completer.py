@@ -160,7 +160,11 @@ class Flag:
         """A few words: 'extract to disk' for 'Extract to disk from the archive.'"""
         text = re.sub(r"^\([^)]*\)\s*", "", self.text)  # "(c mode only) …"
         text = re.split(r"(?<=[.;:,])\s", text, maxsplit=1)[0].rstrip(".;:,")
-        words = text.split()[:3]
+        words: list[str] = []
+        for w in text.split():
+            if words and len(" ".join([*words, w])) > 22:
+                break
+            words.append(w)
         short = " ".join(words)
         if words and not (len(words[0]) > 1 and words[0][1:2].isupper()):
             short = short[:1].lower() + short[1:]
@@ -174,9 +178,16 @@ SYSTEM_BIN_DIRS = ("/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "
                    "/home/linuxbrew/.linuxbrew/bin", "/nix/var/nix/profiles/default/bin", "/run/current-system/sw/bin")
 
 
+# `  -e CODE1,CODE2..    --exclude=CODE1,CODE2..    Exclude types` (short and long in columns)
+_COLUMNS = re.compile(r"^(\s+)(-[A-Za-z0-9])(?:\s(\S+))?\s{2,}(--[\w-]+)(?:[= ]\S+)?\s{2,}(\S.*)$")
+
+
 def parse_options(text: str) -> dict[str, Flag]:
     flags: dict[str, Flag] = {}
-    lines = text.split("\n")
+    lines = [
+        _COLUMNS.sub(lambda m: f"{m[1]}{m[2]}{' ' + m[3].replace(',', ';') if m[3] else ''}, {m[4]}  {m[5]}", line)
+        for line in text.split("\n")
+    ]
     for i, line in enumerate(lines):
         m = _OPT_LINE.match(line)
         if not m:

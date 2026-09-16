@@ -6,12 +6,11 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from rich.table import Table
 from rich.text import Text
 
 from shtick import lint, testing
 from shtick.engine import quote
-from shtick.magics import MagicError, magic, parse_args, split_args
+from shtick.magics import MagicError, magic, split_args, take_flags
 from shtick.magics.core import flag
 
 if TYPE_CHECKING:
@@ -99,8 +98,8 @@ def m_sandbox(shell: Shell, args: str):
     from shtick.sandbox import Sandbox
     from shtick.shell import short_path
 
-    opts, rest = parse_args(args, "c", "copy")
-    words = split_args(rest)
+    found, words = take_flags(split_args(args), "-c", "--copy")
+    copy = bool(found)
     action = words[0].lower() if words else ("status" if shell.sandbox else "on")
     if action in ("status", "show"):
         if shell.sandbox is None:
@@ -117,7 +116,6 @@ def m_sandbox(shell: Shell, args: str):
     if on:
         if shell.sandbox is not None:
             raise MagicError("the sandbox is already on — %sandbox off first")
-        copy = bool(opts.get("c") or opts.get("copy"))
         source = shell.session.cwd
         try:
             sandbox = Sandbox(source, copy=copy)
@@ -129,8 +127,9 @@ def m_sandbox(shell: Shell, args: str):
             raise MagicError(f"can't cd into the sandbox: {result.stderr.strip()}")
         shell.session.cwd = str(sandbox.root)
         shell.sandbox = sandbox
-        shell.print(Text.assemble(("sandbox ", "shtick.muted"), ("on", "shtick.ok"), ("  ", ""), (short_path(sandbox.root), "repr.path")))
-        shell.print(Text(f"a copy of {short_path(source)}" if copy else "an empty directory", style="shtick.faint"))
+        shell.print(Text.assemble(("sandbox ", "shtick.muted"), ("on", "shtick.ok"), ("  ", ""),
+                                  (f"a copy of {short_path(source)}" if copy else "an empty directory", "shtick.fg")), no_wrap=True, overflow="ellipsis")
+        shell.print(Text(f"in {short_path(sandbox.root)} · deleted by %sandbox off", style="shtick.faint"), no_wrap=True, overflow="ellipsis")
     else:
         sandbox = shell.sandbox
         if sandbox is None:
@@ -141,7 +140,8 @@ def m_sandbox(shell: Shell, args: str):
             shell.session.cwd = back
         sandbox.close()
         shell.sandbox = None
-        shell.print(Text.assemble(("sandbox ", "shtick.muted"), ("off", "shtick.muted"), ("  back in ", "shtick.faint"), (short_path(shell.session.cwd), "repr.path")))
+        shell.print(Text.assemble(("sandbox ", "shtick.muted"), ("off", "shtick.muted"), ("  back in ", "shtick.faint"), (short_path(shell.session.cwd), "repr.path")),
+                    no_wrap=True, overflow="ellipsis")
 
 
 # ── %expect / %test ───────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ def show_outcome(shell: Shell, text: str, outcome: testing.Outcome, indent: str 
     if outcome.passed:
         shell.print(Text.assemble((indent, ""), ("✓ ", "shtick.ok"), (text, "shtick.fg")))
     else:
-        shell.print(Text.assemble((indent, ""), ("✗ ", "shtick.err.bold"), (text, "shtick.fg"), ("  ", ""), (outcome.detail, "shtick.err")))
+        shell.print(Text.assemble((indent, ""), ("✗ ", "shtick.err.bold"), (text, "shtick.fg"), ("  got ", "shtick.faint"), (outcome.detail, "shtick.err")))
 
 
 @magic("expect", doc='check the last cell and record it for %test: %expect exit 0 · stdout contains "done"',
@@ -203,7 +203,8 @@ def print_report_cell(shell: Shell, report: testing.CellReport) -> None:
     code = report.cell.code.split("\n")
     summary = code[0] + (" …" if len(code) > 1 else "")
     if not report.outcomes and r.syntax_error is None:
-        shell.print(Text.assemble(("· ", "shtick.faint"), (f"[{report.index}] ", "shtick.faint"), (summary, "shtick.faint")))
+        note = "  (exited the shell)" if r.died else ""
+        shell.print(Text.assemble(("· ", "shtick.faint"), (f"[{report.index}] ", "shtick.faint"), (summary, "shtick.faint"), (note, "shtick.faint")))
         return
     mark = ("✓ ", "shtick.ok") if report.passed else ("✗ ", "shtick.err.bold")
     shell.print(Text.assemble(mark, (f"[{report.index}] ", "shtick.muted"), (summary, "shtick.fg")))
@@ -261,15 +262,14 @@ def m_test(shell: Shell, args: str):
        usage="Run it later with: shtick test FILE (exits non-zero on failure — for CI).\n"
              "The file is a shell script: cells are separated by #%% lines, expectations are #% expect comments.")
 def m_save_test(shell: Shell, args: str):
-    opts, rest = parse_args(args, "f", "force")
-    words = split_args(rest)
+    force, words = take_flags(split_args(args), "-f", "--force")
     if len(words) != 1:
         raise MagicError("usage: %save-test FILE [-f]")
     tf = recorded(shell)
     if not tf.cells:
         raise MagicError("no cells recorded yet")
     path = Path(shell.start_dir if shell.sandbox else shell.session.cwd, os.path.expanduser(words[0]))
-    if path.exists() and not (opts.get("f") or opts.get("force")):
+    if path.exists() and not force:
         raise MagicError(f"{words[0]} exists — %save-test {words[0]} -f to overwrite")
     try:
         path.write_text(tf.dump())
@@ -279,8 +279,6 @@ def m_save_test(shell: Shell, args: str):
     from shtick.shell import short_path
 
     n = sum(len(c.expectations) for c in tf.cells)
-    table = Table.grid(padding=(0, 1))
-    table.add_row(Text("✓", style="shtick.ok"), Text(f"wrote {short_path(path)}", style="shtick.fg"),
-                  Text(f"{len(tf.cells)} cells · {n} expectations", style="shtick.muted"))
-    shell.print(table)
+    shell.print(Text.assemble(("✓ ", "shtick.ok"), (f"wrote {words[0]}", "shtick.fg"), (f"  {len(tf.cells)} cells · {n} expectations", "shtick.muted")))
+    shell.print(Text(f"in {short_path(path.parent)}", style="shtick.faint"), no_wrap=True, overflow="ellipsis")
     shell.print(Text(f"run it with: shtick test {words[0]}", style="shtick.faint"))

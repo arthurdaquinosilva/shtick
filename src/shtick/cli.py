@@ -121,6 +121,7 @@ def test_main(argv: list[str]) -> int:
             out.print(Text.assemble(("✗ ", "shtick.err.bold"), (str(e), "shtick.fg")))
             failed += 1
             continue
+        out.print()
         print_summary(out, report)  # type: ignore[arg-type]
         out.print()
         failed += 0 if report.passed else 1

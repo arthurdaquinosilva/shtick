@@ -140,6 +140,12 @@ def parse_args(args: str, spec: str = "", *long_opts: str) -> tuple[Struct, str]
 
 
 
+def take_flags(words: list[str], *flags: str) -> tuple[set[str], list[str]]:
+    """Pull on/off flags (`-f`, `--force`) out of any position: ({"-f"}, remaining words)."""
+    found = {w for w in words if w in flags}
+    return found, [w for w in words if w not in flags]
+
+
 def split_args(args: str) -> list[str]:
     """Shell-like word splitting for command arguments."""
     import shlex

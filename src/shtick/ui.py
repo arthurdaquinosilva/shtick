@@ -208,7 +208,7 @@ class Repl:
 
     def _incomplete(self) -> bool:
         text = self.buffer.text
-        return bool(text.strip()) and not is_complete(text)
+        return bool(text.strip()) and not is_complete(text, self.shell.session.kind)
 
     # ── layout ────────────────────────────────────────────────────────────
 
@@ -388,7 +388,7 @@ class Repl:
 
         @kb.add("enter", filter=focused & vi_mode & vi_navigation_mode & ~has_selection)
         def _vi_enter(event: KeyPressEvent) -> None:
-            if is_complete(event.current_buffer.text):
+            if is_complete(event.current_buffer.text, self.shell.session.kind):
                 self._submit(event)
 
         @kb.add("enter", filter=focused & ~has_selection & insert_mode)
@@ -403,7 +403,7 @@ class Repl:
             if (dedented := dedent_closer(b.document)) is not None:
                 b.document = dedented
             at_end = not b.document.text_after_cursor.strip()
-            if (at_end or "\n" not in b.text) and is_complete(b.text):
+            if (at_end or "\n" not in b.text) and is_complete(b.text, self.shell.session.kind):
                 self._submit(event)
                 return
             self._newline(b)

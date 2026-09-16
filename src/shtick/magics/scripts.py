@@ -74,7 +74,7 @@ def m_open(shell: Shell, args: str):
         raise MagicError(f"{words[0]} has no commands")
     shell.script = script
     shell.step_pending = None
-    shell.session.query("set -- " + " ".join(quote(a) for a in script.args) if script.args else "set --")
+    shell.run_setup("set -- " + " ".join(quote(a) for a in script.args) if script.args else "set --", label=f"%open {script.name}")
     show_outline(shell, around=0)
 
 
@@ -90,7 +90,7 @@ def _run_chunks(shell: Shell, count: int | None, keep_going: bool) -> None:
     while not script.done and (count is None or ran < count):
         i = script.pos
         script.pos += 1
-        cell = shell.execute(script.chunks[i].code, label=script.label(i))
+        cell = shell.execute(script.chunks[i].code, label=script.label(i), source=(script.name, script.chunks[i].start))
         ran += 1
         if shell.exit_requested:
             return
@@ -206,12 +206,14 @@ def m_close(shell: Shell, args: str):
 def m_trace(shell: Shell, args: str):
     body = args.strip("\n")
     label = ""
+    source = None
     if body == "--next":
         script = _script(shell)
         if script.done:
             raise MagicError(f"{script.name} is at the end")
         label = script.label(script.pos) + "  · traced"
         body = script.chunks[script.pos].code
+        source = (script.name, script.chunks[script.pos].start)
         script.pos += 1
     elif not body.strip():
         last = next((c for c in reversed(shell.cells) if c.code), None)
@@ -225,4 +227,4 @@ def m_trace(shell: Shell, args: str):
         if path and os.path.isfile(path):
             label = f"{words[0]} · traced"
             body = "set -- " + " ".join(quote(a) for a in words[1:]) + f"\n. {quote(path)}"
-    shell.execute(body, label=label or "traced", trace=True)
+    shell.execute(body, label=label or "traced", trace=True, source=source)

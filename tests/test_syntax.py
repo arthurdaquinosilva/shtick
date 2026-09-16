@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 
 from shtick.syntax import is_complete, split_script, strip_prompts
@@ -76,3 +78,15 @@ def test_strip_prompts():
 
 def test_split_script_word_endings_are_not_continuations():
     assert [c.code for c in split_script("echo logged in\necho I do\nx=(\n  1\n)\n")] == ["echo logged in", "echo I do", "x=(\n  1\n)"]
+
+
+needs_zsh = pytest.mark.skipif(not shutil.which("zsh"), reason="zsh not installed")
+
+
+@needs_zsh
+@pytest.mark.parametrize("code, complete", [
+    ('g() { print "x" }', True), ("if true; then", False), ('echo "abc', False), ("ls |", False), ("true &&", False),
+    ("cat <<EOF\nhi", False), ("for i in 1 2; do", False), ("echo $(ls", False), ("fi", True), ("echo hi", True),
+])
+def test_zsh_completeness(code, complete):
+    assert is_complete(code, "zsh") is complete
