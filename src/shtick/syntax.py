@@ -95,8 +95,8 @@ def is_complete(text: str, kind: str = "bash") -> bool:
         # `%trace` and friends take a body on the following lines
         return not is_unfinished(rest, kind)
     lines = text.split("\n")
-    if len(lines) > 1 and not lines[-1].strip() and not is_heredoc_open(text):
-        return True  # a blank last line always submits (unless it's inside a heredoc)
+    if len(lines) > 2 and not lines[-1].strip() and not lines[-2].strip() and not is_heredoc_open(text):
+        return True  # two blank lines: run it anyway (and see the syntax error)
     return not is_unfinished(text, kind)
 
 

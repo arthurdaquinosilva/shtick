@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 import time
@@ -61,7 +62,7 @@ from shtick.banner import wordmark
 from shtick.completer import FlagHinter, ShtickCompleter
 from shtick.history import PromptHistory
 from shtick.output import format_duration
-from shtick.paths import short_path
+from shtick.paths import fit_path, short_path
 from shtick.shell import Shell
 from shtick.syntax import has_prompts, is_complete, strip_prompts
 
@@ -301,7 +302,7 @@ class Repl:
         if not text.strip() and script is not None and not script.done:
             items += [("NEXT", "%next"), ("STEP", "%step"), ("REST", "%run")]
         elif self._incomplete():
-            items += [("NEWLINE", "Enter"), ("RUN", "Enter on a blank line")]
+            items += [("NEWLINE", "Enter"), ("RUN ANYWAY", "Enter on 2 blank lines")]
         else:
             items += [("RUN", "Enter"), ("NEWLINE", "Shift+Enter" if self.shift_enter_works else "Alt+Enter")]
         items += [("EXIT", "Ctrl+D"), ("EDITOR", "Ctrl+O"), ("HELP", "%help")]
@@ -352,12 +353,10 @@ class Repl:
         sandbox = shell.sandbox
         cwd = shell.session.cwd
         if sandbox is not None and sandbox.contains(cwd):
-            import os
-
             rel = os.path.relpath(os.path.realpath(cwd), sandbox.root)
             out += [sep, ("class:status.accent", "sandbox"), ("class:status", "" if rel == "." else f"/{rel}")]
         else:
-            out += [sep, ("class:status", short_path(cwd))]
+            out += [sep, ("class:status", fit_path(short_path(cwd), max(24, self.app.output.get_size().columns // 3)))]
         if shell.last_status is not None:
             ok = shell.last_status == 0
             out += [sep, ("class:status.ok", "✓ ") if ok else ("class:status.err", "✗ "), ("class:status", f"exit {shell.last_status}")]

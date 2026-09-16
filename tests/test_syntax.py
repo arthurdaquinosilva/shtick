@@ -22,9 +22,10 @@ def test_complete(code):
     assert is_complete(code)
 
 
-def test_blank_last_line_submits_but_not_inside_heredoc():
-    assert is_complete("if true; then\n  echo\n")
-    assert not is_complete("cat <<EOF\nline\n")
+def test_two_blank_lines_submit_but_not_inside_heredoc():
+    assert not is_complete("if true; then\n  echo\n")
+    assert is_complete("if true; then\n  echo\n\n")
+    assert not is_complete("cat <<EOF\nline\n\n")
 
 
 def test_magic_with_body():
