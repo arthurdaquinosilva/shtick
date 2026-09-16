@@ -35,6 +35,7 @@ import signal
 import subprocess
 import tempfile
 import termios
+import threading
 import time
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -45,6 +46,8 @@ SHELLS = ("bash", "sh", "dash", "zsh")
 INTERRUPT_STATUS = 130
 
 OutputCallback = Callable[[str, str], None]  # (stream: "out" | "err", text)
+# Terminal bytes → (bytes to give the cell, end its stdin?). Lets the UI do its own line editing.
+InputCallback = Callable[[bytes], "tuple[bytes, bool]"]
 
 
 class ShellNotFound(Exception):
@@ -176,6 +179,7 @@ class Session:
         self._running = False
         self._interrupts = 0
         self._after_interrupt = False
+        self._lock = threading.RLock()  # one cell at a time (completion queries run from another thread)
         self._start()
 
     # ── lifecycle ─────────────────────────────────────────────────────────
@@ -265,7 +269,6 @@ class Session:
             name = os.ttyname(slave)
             attrs = termios.tcgetattr(slave)
             attrs[1] &= ~termios.ONLCR  # keep \n as \n
-            attrs[3] &= ~(termios.ECHO | termios.ICANON | termios.ISIG)
             termios.tcsetattr(slave, termios.TCSANOW, attrs)
             self._pty_master, self._pty_slave_name = master, name
             self._pty_slave = slave  # stays open so the device survives between cells
@@ -297,6 +300,7 @@ class Session:
         input_fd: int | None = None,
         check: bool = True,
         internal: bool = False,
+        on_input: InputCallback | None = None,
     ) -> CellResult:
         """Run `code` in the session.
 
@@ -304,6 +308,10 @@ class Session:
         (the terminal) whose data is forwarded to the cell while it runs; EOF on it closes the
         cell's stdin. With neither, the cell's stdin is empty. internal: don't let this cell
         change the `$?` seen by the next user cell."""
+        with self._lock:
+            return self._run(code, on_output, stdin, input_fd, check, internal, on_input)
+
+    def _run(self, code, on_output, stdin, input_fd, check, internal, on_input) -> CellResult:
         self.count += 1
         n = self.count
         result = CellResult(code=code, number=n)
@@ -350,7 +358,7 @@ class Session:
 
         self._running = True
         try:
-            self._pump(result, token, on_output, cell_in, input_fd, eof_after_started)
+            self._pump(result, token, on_output, cell_in, input_fd, eof_after_started, on_input)
         finally:
             self._running = False
             result.interrupted = self._interrupts > 0
@@ -374,7 +382,16 @@ class Session:
         path.unlink(missing_ok=True)
         return result
 
-    def _pump(self, result: CellResult, token: str, on_output: OutputCallback | None, cell_in: int, input_fd: int | None, eof_after_started: bool) -> None:
+    def _pump(
+        self,
+        result: CellResult,
+        token: str,
+        on_output: OutputCallback | None,
+        cell_in: int,
+        input_fd: int | None,
+        eof_after_started: bool,
+        on_input: InputCallback | None,
+    ) -> None:
         proc = self.proc
         assert proc is not None and proc.stdout is not None and proc.stderr is not None
         decoders = {"out": codecs.getincrementaldecoder("utf-8")("replace"), "err": codecs.getincrementaldecoder("utf-8")("replace")}
@@ -451,18 +468,27 @@ class Session:
                             data = os.read(fd, 4096)
                         except OSError:
                             data = b""
-                        if data:
-                            if self.tty and self._pty_master is not None:
-                                os.write(self._pty_master, data)
-                            elif stdin_open:
-                                _write_all(cell_in, data)
-                        else:
+                        if not data:
                             sel.unregister(fd)
-                            if stdin_open and started:
+                            forward, eof = b"", True
+                        elif on_input is not None:
+                            forward, eof = on_input(data)
+                        else:
+                            forward, eof = data, False
+                        if self.tty and self._pty_master is not None:
+                            if forward:
+                                os.write(self._pty_master, forward)
+                            if eof and not data:
+                                os.write(self._pty_master, b"\x04")
+                            continue
+                        if forward and stdin_open:
+                            _write_all(cell_in, forward)
+                        if eof and stdin_open:
+                            if started:
                                 os.close(cell_in)
                                 stdin_open = False
-                            elif self.tty and self._pty_master is not None:
-                                os.write(self._pty_master, b"\x04")
+                            else:
+                                eof_after_started = True
                 if proc.poll() is not None:
                     self._drain(streams, emit)
                     result.died = True
