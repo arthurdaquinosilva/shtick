@@ -268,4 +268,6 @@ When two shells are the same kind, the headers show their paths.
 
 ## Themes
 
-Three palettes, shared by the input, the output and syntax highlighting: `void` (near-black with a warm accent, the default), `nebula` (violet) and `matrix` (green). `%theme` lists them, `%theme nebula` switches.
+Three palettes, shared by the input, the output and syntax highlighting: `tide` (blue-black with a teal accent, the default), `phosphor` (amber, like an old CRT) and `chalk` (for terminals with a light background). `%theme` lists them with swatches, `%theme chalk` switches, `%config theme=chalk --save` keeps it.
+
+Screenshots: [tide](assets/demo.svg) · [phosphor](assets/demo-phosphor.svg) · [chalk](assets/demo-chalk.svg).

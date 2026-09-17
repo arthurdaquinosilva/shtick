@@ -52,7 +52,7 @@ Switching starts a fresh session in the same directory: variables, functions and
 
 ### `%theme`
 
-List or switch color themes: %theme · %theme nebula.
+List or switch color themes: %theme · %theme phosphor.
 
 ### `%tty`
 

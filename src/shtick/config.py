@@ -15,7 +15,7 @@ EDITING_MODES = ("emacs", "vi")
 
 @dataclass
 class Settings:
-    theme: str = "void"
+    theme: str = "tide"
     editing_mode: str = "emacs"
     shell: str = "bash"
     lint: bool = True  # live shellcheck while typing, when shellcheck is installed
@@ -139,6 +139,12 @@ def load_settings(profile: Profile | None) -> tuple[Settings, list[str]]:
         if value := os.environ.get(env):
             data[key] = value
     for key, value in data.items():
+        if key == "theme":
+            from shtick.theme import DEFAULT_THEME, PALETTES
+
+            if value not in PALETTES:
+                warnings.append(f"config: unknown theme {value!r} — using {DEFAULT_THEME} (themes: {', '.join(PALETTES)})")
+                continue
         try:
             setattr(settings, key, settings.validate(key, value))
         except KeyError:

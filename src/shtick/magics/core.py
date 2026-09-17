@@ -106,7 +106,7 @@ def m_help(shell: Shell, args: str):
     shell.print(command_help(spec))
 
 
-@magic("theme", doc="list or switch color themes: %theme · %theme nebula")
+@magic("theme", doc="list or switch color themes: %theme · %theme phosphor")
 def m_theme(shell: Shell, args: str):
     name = args.strip()
     if not name:

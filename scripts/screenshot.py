@@ -35,9 +35,11 @@ SCRIPT = [
 ]
 LOGS = {"app.log": "ok\nERROR disk full\nok\nERROR timeout\n", "db.log": "ok\nok\n"}
 
+THEME_NAME = os.environ.get("SHTICK_THEME", "tide")
+BACKGROUND = {"tide": (13, 17, 23), "phosphor": (18, 12, 5), "chalk": (255, 255, 255)}
 THEME = TerminalTheme(
-    (22, 22, 22),
-    (231, 231, 231),
+    BACKGROUND.get(THEME_NAME, (13, 17, 23)),
+    {"chalk": (31, 35, 40)}.get(THEME_NAME, (216, 226, 236)),  # the terminal's default text color
     [(0, 0, 0), (255, 107, 107), (126, 226, 168), (242, 193, 78), (124, 196, 255), (201, 160, 255), (134, 199, 192), (231, 231, 231)],
     [(85, 85, 85), (255, 107, 107), (126, 226, 168), (242, 193, 78), (124, 196, 255), (201, 160, 255), (134, 199, 192), (255, 255, 255)],
 )
@@ -63,7 +65,7 @@ def capture(script: list[tuple[str, float]]) -> pyte.Screen:
             (project / name).write_text(text)
         env = dict(
             os.environ, TERM="xterm-256color", COLORTERM="truecolor", PROMPT_TOOLKIT_NO_CPR="1", HOME=home, USER="arthur",
-            XDG_CONFIG_HOME=f"{home}/config", XDG_DATA_HOME=f"{home}/data", LC_ALL="C", LANG="C.UTF-8",
+            SHTICK_THEME=THEME_NAME, XDG_CONFIG_HOME=f"{home}/config", XDG_DATA_HOME=f"{home}/data", LC_ALL="C", LANG="C.UTF-8",
         )
         child = pexpect.spawn(sys.executable, ["-m", "shtick"], env=env, dimensions=(ROWS, COLS), cwd=str(project))
 
@@ -98,6 +100,8 @@ def to_text(screen: pyte.Screen) -> Text:
 
 
 def save(screen: pyte.Screen, name: str) -> None:
+    if THEME_NAME != "tide":
+        name = name.replace(".svg", f"-{THEME_NAME}.svg")
     console = Console(record=True, width=COLS, force_terminal=True, color_system="truecolor", file=open(os.devnull, "w"))
     console.print(to_text(screen), end="", overflow="crop", no_wrap=True)
     target = ROOT / "docs" / "assets" / name

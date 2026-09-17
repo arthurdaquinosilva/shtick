@@ -94,7 +94,7 @@ shtick --shell dash             # or sh, zsh, a path like /bin/bash
 shtick deploy.sh staging        # open a script to step through
 shtick -c 'echo hi; false'      # run code as a cell, print the block, exit with its status
 shtick test *.shtick            # run saved tests; exit status 1 if any check fails (--lint: shellcheck too)
-shtick --vi --theme nebula --profile work
+shtick --vi --theme phosphor --profile work
 ```
 
 ## Development

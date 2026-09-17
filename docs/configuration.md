@@ -14,7 +14,7 @@
 Every setting is optional. This example shows each one with its default:
 
 ```toml
-theme = "void"                          # void · nebula · matrix
+theme = "tide"                          # tide · phosphor · chalk (for light terminals)
 editing_mode = "emacs"                  # emacs · vi
 shell = "bash"                          # bash · sh · dash · zsh · a path like "/bin/bash"
 lint = true                             # live shellcheck hint in the key bar (when shellcheck is installed)
@@ -50,7 +50,7 @@ shtick [SCRIPT [ARGS…]]      interactive; with SCRIPT, open it to step through
   -c CODE                    run CODE as a cell, print the block, exit with the cell's status
   -s, --shell SHELL          bash (default), sh, dash, zsh or a path
   --profile NAME             separate config and history
-  --theme void|nebula|matrix
+  --theme tide|phosphor|chalk
   --vi                       vi key bindings
   --version
 
@@ -90,8 +90,8 @@ Since cells and checks are comments, the file is also a valid script, and it's e
 
 | Theme | Look |
 | --- | --- |
-| `void` | near-black, one warm orange accent (default) |
-| `nebula` | deep violet with cyan |
-| `matrix` | dark green |
+| `tide` | blue-black bar, teal accent, lime and amber highlights (default) |
+| `phosphor` | amber on dark, like an old CRT terminal |
+| `chalk` | for terminals with a light background |
 
 The same palette colors the input, cell output, the key bar and syntax highlighting.

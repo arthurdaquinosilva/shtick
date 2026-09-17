@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **New color themes**, no longer shared with ember: `tide` (blue-black with a teal accent, the new default), `phosphor` (amber, like an old CRT) and `chalk` (for light terminal backgrounds). `void`, `nebula` and `matrix` are gone; a config that names one gets a warning and the default theme.
+
 ## 0.1.0
 
 First release.
