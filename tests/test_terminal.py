@@ -123,7 +123,7 @@ def test_flag_hints(term):
 def test_vi_mode_escape(tmp_path):
     t = Terminal(tmp_path, "--vi")
     try:
-        assert "[INSERT]" in t.text()
+        t.wait_for("[INSERT]")
         t.send("echo vi", wait=0.1)
         t.send("\x1b", wait=0.5)
         t.wait_for("[NORMAL]")
@@ -137,8 +137,8 @@ def test_open_script_from_the_command_line(tmp_path):
     (tmp_path / "s.sh").write_text("echo one\necho two\n")
     t = Terminal(tmp_path, "s.sh")
     try:
-        screen = t.text()
-        assert "s.sh  2 commands" in screen and "NEXT: %next" in screen
+        t.wait_for("s.sh  2 commands")
+        t.wait_for("NEXT: %next")
         t.send("%next\r")
         t.wait_for("│ one")
         t.wait_for("s.sh 2/2")
