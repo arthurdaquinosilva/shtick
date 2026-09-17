@@ -33,6 +33,9 @@ if TYPE_CHECKING:
     from shtick.testing import Expectation
 
 
+BODY_COMMANDS = {"trace", "compare"}  # commands that take code on the following lines
+
+
 @contextmanager
 def keys_one_by_one(fd: int, enabled: bool = True) -> Iterator[None]:
     """Non-canonical, no-echo terminal input (Ctrl+C still signals) while a cell runs."""
@@ -195,6 +198,11 @@ class Shell:
         if not text.strip():
             return None
         if m := MAGIC_RE.match(text.lstrip()):
+            first, _, rest = text.lstrip().partition("\n")
+            if rest.strip() and m["name"] not in BODY_COMMANDS:
+                # a %command line followed by code: the command, then the code as its own cell
+                self.run_cell(first)
+                return None if self.exit_requested else self.run_cell(rest)
             self.run_magic(m["name"], m["args"] or "", text.lstrip())
             return None
         step, self.step_pending = self.step_pending, None

@@ -449,3 +449,8 @@ def test_compare_previous_cell_with_body(shell, capfd):
     assert "from-cell" in capfd.readouterr().out
     shell.run_cell("%compare bash dash\necho body-line")
     assert "body-line" in capfd.readouterr().out
+
+
+def test_command_line_followed_by_code(shell, capfd):
+    shell.run_cell("%tty on\n[ -t 1 ] && echo tty")
+    assert shell.settings.tty and shell.cells[-1].result.stdout == "tty\n"
