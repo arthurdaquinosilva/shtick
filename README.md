@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/docs/assets/cover.svg?sanitize=true" alt="shtick's start screen: the pixel SHTICK_ wordmark, version, shell and directory, the input bar and the key bar" width="900">
+<img src="https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/docs/assets/cover.svg?sanitize=true" alt="shtick's start screen: the pixel $HTICK wordmark, version, shell and directory, the input bar and the key bar" width="900">
 
 # ✓ shtick
 

@@ -6,13 +6,12 @@ from rich.text import Text
 
 # 5×7 bitmap glyphs. Rendered with ▀ ▄ █, every terminal cell holds two square-ish pixels.
 GLYPHS: dict[str, tuple[str, ...]] = {
-    "S": (".####", "#....", "#....", ".###.", "....#", "....#", "####."),
+    "$": ("..#..", ".####", "#.#..", ".###.", "..#.#", "####.", "..#.."),  # the shell prompt's $ in place of the S
     "H": ("#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
     "T": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."),
     "I": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"),
     "C": (".####", "#....", "#....", "#....", "#....", "#....", ".####"),
     "K": ("#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"),
-    "_": (".....", ".....", ".....", ".....", ".....", ".....", "#####"),
 }
 _HALF = {(True, True): "█", (True, False): "▀", (False, True): "▄", (False, False): " "}
 
@@ -37,18 +36,6 @@ def pixel_rows(word: str, spacing: int = 1) -> list[str]:
     return lines
 
 
-def wordmark(word: str = "SHTICK_", indent: int = 2) -> list[Text]:
-    """The wordmark in the accent colour; a trailing underscore blinks like a cursor."""
-    blink_from = None
-    if word.endswith("_"):
-        blink_from = (len(word) - 1) * 6  # 5px glyph + 1px spacing
-    lines = []
-    for row in pixel_rows(word):
-        text = Text(" " * indent)
-        if blink_from is None:
-            text.append(row, style="shtick.accent.bold")
-        else:
-            text.append(row[:blink_from], style="shtick.accent.bold")
-            text.append(row[blink_from:], style="shtick.accent.blink")
-        lines.append(text)
-    return lines
+def wordmark(word: str = "$HTICK", indent: int = 2) -> list[Text]:
+    """The wordmark in the accent colour."""
+    return [Text(" " * indent) + Text(row, style="shtick.accent.bold") for row in pixel_rows(word)]

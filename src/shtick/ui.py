@@ -503,10 +503,10 @@ class Repl:
         ui.print()
         width = ui.width
         if width >= 48:
-            for line in wordmark("SHTICK_"):
+            for line in wordmark("$HTICK"):
                 ui.print(line, overflow="crop", no_wrap=True)
         else:
-            ui.print(Text("  SHTICK_", style="shtick.accent.bold"))
+            ui.print(Text("  $HTICK", style="shtick.accent.bold"))
         ui.print()
         ui.print(Text(f"  v{__version__}", style="shtick.faint"))
         ui.print()

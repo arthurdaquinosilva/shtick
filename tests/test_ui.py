@@ -60,9 +60,10 @@ def test_closer_already_aligned_is_left_alone():
 def test_wordmark_is_four_lines_of_half_blocks():
     from shtick.banner import pixel_rows
 
-    rows = pixel_rows("SHTICK_")
+    rows = pixel_rows("$HTICK")
     assert len(rows) == 4
     assert set("".join(rows)) <= set("█▀▄ ")
+    assert rows[0].startswith(" ▄█▄▄")  # the $ with its stroke above and below
 
 
 def test_closer_finds_its_opener():
