@@ -13,6 +13,8 @@ runs its code:
 
 from __future__ import annotations
 
+import difflib
+import json
 import os
 import re
 import shlex
@@ -29,6 +31,7 @@ if TYPE_CHECKING:
 USAGE = """\
 exit N · exit != N · exit nonzero · ok · fails
 stdout|stderr|output  contains TEXT · not-contains TEXT · equals TEXT · matches REGEX · empty · not-empty · lines N
+  (TEXT may use \\n and \\t: stdout equals "one\\ntwo")
 file exists PATH · file missing PATH · file contains PATH TEXT · dir exists PATH
 duration < 2s · duration < 500ms
 sandbox changed PATH · sandbox unchanged"""
@@ -42,6 +45,7 @@ class ExpectationError(ValueError):
 class Outcome:
     passed: bool
     detail: str = ""  # what was actually found, when it failed
+    diff: list[str] = field(default_factory=list)  # unified diff lines for text comparisons
 
 
 @dataclass
@@ -78,6 +82,11 @@ def _duration(value: str) -> float:
         raise ExpectationError(f"bad duration {value!r} — try 2s or 500ms")
     n = float(m[1])
     return n / 1000 if m[2] == "ms" else n * 60 if m[2] == "m" else n
+
+
+def unescape(text: str) -> str:
+    r"""`\n` and `\t` in text arguments, so one-line %expect can describe multi-line output."""
+    return re.sub(r"\\([nt\\])", lambda m: {"n": "\n", "t": "\t", "\\": "\\"}[m[1]], text)
 
 
 def parse(text: str) -> Expectation:
@@ -127,13 +136,20 @@ def parse(text: str) -> Expectation:
             return Expectation(canonical, lambda c: Outcome((stream(c) == "") == empty, f"{head} was {_show(stream(c))}"))
         if len(args) != 1:
             raise ExpectationError(f"{head} {op} expects one argument (quote it)")
-        arg = args[0]
+        arg = unescape(args[0]) if op != "matches" else args[0]
         if op == "contains":
             return Expectation(canonical, lambda c: Outcome(arg in stream(c), f"{head} was {_show(stream(c))}"))
         if op == "not-contains":
             return Expectation(canonical, lambda c: Outcome(arg not in stream(c), f"{head} was {_show(stream(c))}"))
         if op == "equals":
-            return Expectation(canonical, lambda c: Outcome(stream(c).rstrip("\n") == arg.rstrip("\n"), f"{head} was {_show(stream(c))}"))
+            def equals(c: Context) -> Outcome:
+                got, want = stream(c).rstrip("\n"), arg.rstrip("\n")
+                if got == want:
+                    return Outcome(True)
+                diff = list(difflib.unified_diff(want.split("\n"), got.split("\n"), "expected", head, lineterm="", n=2))
+                return Outcome(False, f"{head} was {_show(stream(c))}", diff[2:])  # drop the ---/+++ header
+
+            return Expectation(canonical, equals)
         if op == "matches":
             try:
                 pattern = re.compile(arg, re.M)
@@ -212,6 +228,7 @@ class TestCell:
     code: str
     expectations: list[str] = field(default_factory=list)
     label: str = ""
+    stdin: str | None = None  # what was typed into the cell while it ran, replayed by tests
 
 
 @dataclass
@@ -228,6 +245,8 @@ class TestFile:
         for i, cell in enumerate(self.cells, 1):
             out.append(f"#%% [{i}]" + (f" {cell.label}" if cell.label else ""))
             out.append(cell.code.rstrip("\n"))
+            if cell.stdin:
+                out.append(f"#% stdin {json.dumps(cell.stdin, ensure_ascii=False)}")
             out += [f"#% expect {e}" for e in cell.expectations]
         return "\n".join(out) + "\n"
 
@@ -251,6 +270,14 @@ def load(text: str) -> TestFile:
             label = re.sub(r"^#%%\s*(\[\d+\])?\s*", "", line)
             current = TestCell("", label=label)
             tf.cells.append(current)
+            continue
+        if line.startswith("#% stdin "):
+            if current is None:
+                raise ExpectationError("stdin before the first #%% cell")
+            try:
+                current.stdin = (current.stdin or "") + str(json.loads(line[len("#% stdin "):]))
+            except ValueError as e:
+                raise ExpectationError(f"bad #% stdin line: {e}") from None
             continue
         if line.startswith("#% expect "):
             if current is None:
@@ -308,7 +335,7 @@ def run(tf: TestFile, cwd: str, on_cell: Callable[[CellReport], None] | None = N
         with Session(tf.shell, cwd=str(sandbox.root) if sandbox else cwd) as session:
             for i, cell in enumerate(tf.cells, 1):
                 before = sandbox.snapshot() if sandbox else None
-                result = session.run(cell.code)
+                result = session.run(cell.code, stdin=cell.stdin)
                 changes = sandbox.diff(before, sandbox.snapshot()) if sandbox and before is not None else None
                 ctx = Context(result, changes)
                 outcomes = []

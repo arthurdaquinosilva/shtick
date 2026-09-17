@@ -15,6 +15,7 @@ class Script:
     chunks: list[Chunk]
     args: list[str] = field(default_factory=list)
     pos: int = 0  # index of the next chunk to run
+    breakpoints: set[int] = field(default_factory=set)  # line numbers; %run stops before their command
 
     @classmethod
     def load(cls, path: str | os.PathLike, args: list[str] | None = None) -> Script:
@@ -29,6 +30,13 @@ class Script:
             self.pos = len(self.chunks)
         else:
             self.pos = next((i for i, c in enumerate(self.chunks) if c.end >= line), len(self.chunks))
+
+    def chunk_at(self, line: int) -> int | None:
+        """Index of the command that contains `line` (or the first one after it)."""
+        return next((i for i, c in enumerate(self.chunks) if c.end >= line), None)
+
+    def breakpoint_chunks(self) -> set[int]:
+        return {i for line in self.breakpoints if (i := self.chunk_at(line)) is not None}
 
     @property
     def done(self) -> bool:

@@ -454,3 +454,94 @@ def test_compare_previous_cell_with_body(shell, capfd):
 def test_command_line_followed_by_code(shell, capfd):
     shell.run_cell("%tty on\n[ -t 1 ] && echo tty")
     assert shell.settings.tty and shell.cells[-1].result.stdout == "tty\n"
+
+
+# ── %watch & %break ───────────────────────────────────────────────────────
+
+
+def test_watch_runs_the_script_in_a_new_process(shell, tmp_path, capfd):
+    (tmp_path / "w.sh").write_text('echo "run with $1"; exit 3\n')
+    run(shell, "keep=1")
+    shell.run_cell("%watch w.sh hello --runs 1")
+    out = capfd.readouterr().out
+    assert "> bash w.sh hello" in out and "│ run with hello" in out and "✗ exit 3" in out
+    assert "stopped watching w.sh after 1 runs" in out
+    assert run(shell, 'echo "keep=$keep"').result.stdout == "keep=1\n"  # the session survived the script's exit
+
+
+def test_breakpoints_stop_run(shell, tmp_path, capfd):
+    (tmp_path / "b.sh").write_text("echo one\necho two\nx=3\necho four\n")
+    shell.run_cell("%open b.sh")
+    shell.run_cell("%break 3")
+    assert "●" in capfd.readouterr().out
+    shell.run_cell("%run")
+    assert shell.script.pos == 2
+    assert "breakpoint at b.sh:3" in capfd.readouterr().out
+    shell.run_cell("%run")  # continues past the breakpoint it stopped at
+    assert shell.script.done
+    shell.run_cell("%break -d 3")
+    assert not shell.script.breakpoints
+    shell.run_cell("%break 99")
+    assert "no command" in capfd.readouterr().out
+
+
+# ── diffs, stdin replay, --lint, %env, --save, splitting ──────────────────
+
+
+def test_equals_failure_shows_a_diff(shell, capfd):
+    run(shell, "printf 'one\\ntwo\\nthree\\n'")
+    shell.run_cell("%expect stdout equals 'one\\ntwo\\nfour'")
+    out = capfd.readouterr().out
+    assert "-four" in out and "+three" in out
+
+
+def test_test_file_replays_stdin(tmp_path):
+    tf = testing.TestFile([testing.TestCell('read -r a; read -r b; echo "$b-$a"', ['stdout equals "y-x"'], stdin="x\ny\n")])
+    text = tf.dump()
+    assert '#% stdin "x\\ny\\n"' in text
+    loaded = testing.load(text)
+    assert loaded.cells[0].stdin == "x\ny\n"
+    assert testing.run(loaded, str(tmp_path)).passed
+
+
+@needs_shellcheck
+def test_shtick_test_lint(tmp_path):
+    tf = testing.TestFile([testing.TestCell("echo $1", ["exit 0"])])
+    (tmp_path / "t.shtick").write_text(tf.dump())
+    proc = subprocess.run([sys.executable, "-m", "shtick", "test", "--lint", str(tmp_path / "t.shtick")], capture_output=True, text=True)
+    assert proc.returncode == 0 and "SC2086" in proc.stdout and "shellcheck: 1 findings" in proc.stdout
+
+
+def test_env_changes(shell, capfd):
+    run(shell, 'export SHTICK_NEW=1; PATH="/opt/shtick-test:$PATH"; unset SHTICK_TEST_VAR; not_exported=1')
+    capfd.readouterr()
+    shell.run_cell("%env")
+    out = capfd.readouterr().out
+    assert "+ SHTICK_NEW=1" in out and "− SHTICK_TEST_VAR" in out and "~ PATH  +/opt/shtick-test" in out
+    assert "not_exported" not in out
+
+
+def test_config_save(tmp_path, monkeypatch, capfd):
+    from shtick.config import Profile, load_settings
+    from shtick.shell import Shell
+
+    monkeypatch.chdir(tmp_path)
+    profile = Profile("t", tmp_path / "config", tmp_path / "data")
+    profile.ensure()
+    sh = Shell(Settings(), profile=profile, cwd=str(tmp_path))
+    try:
+        sh.run_cell('%config startup=["set -o pipefail"] --save')
+        sh.run_cell("%vi --save")
+        sh.run_cell("%config lint=off")
+    finally:
+        sh.close()
+    settings, warnings = load_settings(profile)
+    assert settings.startup == ["set -o pipefail"] and settings.editing_mode == "vi" and settings.lint is True
+    assert not warnings
+
+
+def test_command_lines_split_multi_line_input(shell, capfd):
+    shell.run_cell("x=5\n%vars\ncat <<EOF\n%not-a-command\nEOF")
+    out = capfd.readouterr().out
+    assert "+ x=" in out
+    assert shell.cells[-1].result.stdout == "%not-a-command\n"

@@ -24,7 +24,7 @@ from shtick.history import HistoryManager
 from shtick.magics import MAGICS, MagicError
 from shtick.paths import fit_path, short_path
 from shtick.output import LineInput, Rail, RailState, Spinner, format_duration
-from shtick.syntax import MAGIC_RE
+from shtick.syntax import MAGIC_RE, is_unfinished
 from shtick.theme import PALETTES, Theme, get_theme
 
 if TYPE_CHECKING:
@@ -68,6 +68,7 @@ class Cell:
     changes: Changes | None = None
     trace: list[tracing.TraceLine] = field(default_factory=list)
     sandbox: str = "off"  # off · empty · copy — where the cell ran
+    stdin: str = ""  # what was typed into the cell while it ran
 
     @property
     def ok(self) -> bool:
@@ -100,6 +101,7 @@ class Shell:
         self._magic_cells = 0
         self.interactive = sys.__stdout__.isatty() and sys.__stdin__.isatty()
         self.vars_baseline = None
+        self.env_baseline: dict[str, str] | None = None
         self._run_startup()
 
     # ── consoles, settings, sessions ──────────────────────────────────────
@@ -123,7 +125,7 @@ class Shell:
 
     def _run_startup(self) -> None:
         """Every new session (start, restart, %shell, after the shell exited): startup lines, %vars baseline."""
-        from shtick.magics.inspect import snapshot
+        from shtick.magics.inspect import env_snapshot, snapshot
 
         for line in self.settings.startup:
             result = self.session.query(line)
@@ -132,6 +134,7 @@ class Shell:
         if self.session.kind == "zsh":
             snapshot(self.session)  # the first listing makes zsh autoload a few parameters (LOGCHECK, WATCHFMT…)
         self.vars_baseline = snapshot(self.session)
+        self.env_baseline = env_snapshot(self.session)
 
     def switch_shell(self, shell: str) -> None:
         cwd = self.session.cwd
@@ -205,6 +208,12 @@ class Shell:
                 return None if self.exit_requested else self.run_cell(rest)
             self.run_magic(m["name"], m["args"] or "", text.lstrip())
             return None
+        lines = text.split("\n")
+        for i, line in enumerate(lines[1:], 1):
+            if MAGIC_RE.match(line) and not is_unfinished("\n".join(lines[:i]), self.session.kind):
+                # a %command line after complete code (not inside a heredoc): run them one after the other
+                self.run_cell("\n".join(lines[:i]))
+                return None if self.exit_requested else self.run_cell("\n".join(lines[i:]))
         step, self.step_pending = self.step_pending, None
         label = ""
         source = None
@@ -338,6 +347,12 @@ class Shell:
         interactive_input = sys.__stdin__.isatty()
         start_in, _, reset_in = self._ansi(("\x00", "shtick.input")).partition("\x00")
         line_input = LineInput(rail, rails["in"], (start_in, reset_in))
+        typed: list[bytes] = []
+
+        def on_input(data: bytes) -> tuple[bytes, bool]:
+            forward, eof = (data, False) if self.settings.tty else line_input.feed(data)
+            typed.append(forward)
+            return forward, eof
         previous = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, lambda *_: self.session.interrupt())
         spinner.start()
@@ -347,7 +362,7 @@ class Shell:
                     run_code,
                     on_output=on_output,
                     input_fd=sys.__stdin__.fileno() if interactive_input else None,
-                    on_input=(lambda data: (data, False)) if self.settings.tty else line_input.feed,
+                    on_input=on_input,
                 )
         finally:
             signal.signal(signal.SIGINT, previous)
@@ -363,7 +378,7 @@ class Shell:
             result.stderr = "".join(t for st, t in shown if st == "err")
 
         self.origins[result.number] = (n, *(source or ("", 0)))
-        cell = Cell(n, code, result, label)
+        cell = Cell(n, code, result, label, stdin=b"".join(typed).decode(errors="replace"))
         if self.sandbox is not None:
             cell.sandbox = "copy" if self.sandbox.copied else "empty"
         if splitter:

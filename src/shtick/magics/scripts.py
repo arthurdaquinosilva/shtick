@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shlex
+from pathlib import Path
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,7 @@ def show_outline(shell: Shell, around: int | None = None, context: int = 4) -> N
     grid.add_column(justify="right", style="shtick.muted", no_wrap=True)
     grid.add_column(overflow="ellipsis", no_wrap=True)
     chunks = script.chunks
+    breaks = script.breakpoint_chunks()
     lo, hi = 0, len(chunks)
     if around is not None and len(chunks) > 2 * context + 1:
         lo = max(0, around - context)
@@ -43,7 +45,7 @@ def show_outline(shell: Shell, around: int | None = None, context: int = 4) -> N
         chunk = chunks[i]
         current = i == script.pos
         done = i < script.pos
-        marker = Text("▸", style="shtick.accent.bold") if current else Text("")
+        marker = Text("▸", style="shtick.accent.bold") if current else Text("●", style="shtick.err.bold") if i in breaks else Text("")
         summary = Text(chunk.summary, style="shtick.fg.bold" if current else "shtick.faint" if done else "shtick.fg")
         grid.add_row(marker, str(i + 1), chunk.lines, summary)
     if hi < len(chunks):
@@ -82,13 +84,24 @@ def _run_chunks(shell: Shell, count: int | None, keep_going: bool) -> None:
     script = _script(shell)
     if script.done:
         raise MagicError(f"{script.name} is at the end — %goto 1 to start over")
+
     def stop(message: str) -> None:
         shell.warn(message)
         shell.spacing()
 
     ran = 0
+    breaks = script.breakpoint_chunks() if count is None else set()
     while not script.done and (count is None or ran < count):
         i = script.pos
+        if ran and i in breaks:
+            chunk = script.chunks[i]
+            if not shell._magic_cells:
+                shell.print()
+            shell.print(Text.assemble(("● ", "shtick.err.bold"), (f"breakpoint at {script.name}:{chunk.lines}", "shtick.fg"),
+                                      ("  ", ""), (chunk.summary, "shtick.muted")))
+            shell.print(Text("%next runs it · %step edits it first · %run continues · %vars shows the state", style="shtick.faint"))
+            shell.spacing()
+            return
         script.pos += 1
         cell = shell.execute(script.chunks[i].code, label=script.label(i), source=(script.name, script.chunks[i].start))
         ran += 1
@@ -142,6 +155,40 @@ def m_run(shell: Shell, args: str):
     if opts.get("all"):
         script.pos = 0
     _run_chunks(shell, None, keep_going=bool(opts.get("k")))
+
+
+@magic("break", "b", doc="breakpoints for %run in the open script: %break LINE… · %break · -d LINE · --clear",
+       usage="%break 12 30    stop %run before the commands containing lines 12 and 30\n"
+             "%break          list breakpoints\n%break -d 12    remove one\n%break --clear  remove all\n\n"
+             "At a breakpoint, inspect the session (%vars, any shell code), then %next or %run to go on.")
+def m_break(shell: Shell, args: str):
+    script = _script(shell)
+    words = split_args(args)
+    if not words:
+        if not script.breakpoints:
+            shell.print(Text(f"no breakpoints in {script.name} — %break LINE", style="shtick.muted"))
+        for line in sorted(script.breakpoints):
+            i = script.chunk_at(line)
+            where = f"{script.chunks[i].lines}  {script.chunks[i].summary}" if i is not None else "past the end"
+            shell.print(Text.assemble(("● ", "shtick.err.bold"), (f"{script.name}:{line}", "shtick.fg"), ("  → ", "shtick.faint"), (where, "shtick.muted")))
+        return
+    if words == ["--clear"]:
+        script.breakpoints.clear()
+        shell.print(Text("breakpoints cleared", style="shtick.muted"))
+        return
+    remove = words[0] == "-d"
+    lines = words[1:] if remove else words
+    if not lines or not all(w.isdigit() and int(w) > 0 for w in lines):
+        raise MagicError("usage: %break LINE… · %break -d LINE · %break --clear")
+    for w in lines:
+        line = int(w)
+        if remove:
+            script.breakpoints.discard(line)
+        else:
+            if script.chunk_at(line) is None:
+                raise MagicError(f"{script.name} has no command at or after line {line}")
+            script.breakpoints.add(line)
+    show_outline(shell, around=script.chunk_at(int(lines[0])))
 
 
 @magic("goto", doc="move the open script's position: %goto N (command number) · %goto +N / -N")
@@ -228,3 +275,69 @@ def m_trace(shell: Shell, args: str):
             label = f"{words[0]} · traced"
             body = "set -- " + " ".join(quote(a) for a in words[1:]) + f"\n. {quote(path)}"
     shell.execute(body, label=label or "traced", trace=True, source=source)
+
+
+@magic("watch", doc="run a script again every time it's saved: %watch FILE [args…] · q or ctrl+c stops",
+       usage="Each run is a new process of the session's shell (`bash FILE args`), so every run starts clean\n"
+             "and an `exit` in the script doesn't end your session. After each run, shellcheck's findings are\n"
+             "counted. Stop with q or Ctrl+C.\n\n"
+             "--runs N   stop after N runs")
+def m_watch(shell: Shell, args: str):
+    import select
+    import sys
+    import time
+
+    from shtick import lint
+    from shtick.shell import keys_one_by_one
+
+    words = split_args(args)
+    runs_limit = None
+    if "--runs" in words:
+        i = words.index("--runs")
+        if i + 1 >= len(words) or not words[i + 1].isdigit():
+            raise MagicError("--runs expects a number")
+        runs_limit = int(words[i + 1])
+        del words[i: i + 2]
+    if not words:
+        raise MagicError("usage: %watch FILE [args…]")
+    path = os.path.join(shell.session.cwd, os.path.expanduser(words[0]))
+    if not os.path.isfile(path):
+        raise MagicError(f"no file {words[0]}")
+    shell_word = shell.session.name if not os.path.isabs(shell.session.name) else shell.session.path
+    command = shlex.join([shell_word, words[0], *words[1:]])
+    interactive = sys.__stdin__.isatty()
+
+    def mtime() -> float:
+        try:
+            return os.stat(path).st_mtime_ns
+        except OSError:
+            return 0
+
+    runs = 0
+    seen = mtime()
+    try:
+        while True:
+            runs += 1
+            cell = shell.execute(command, label=f"{words[0]} · run {runs} · watching")
+            findings = lint.check(Path(path).read_text(errors="replace"), shell.session.kind) if lint.shellcheck_path() else []
+            if findings:
+                shell.print(Text.assemble(("⚠ ", "shtick.warn"), (f"shellcheck: {len(findings)} findings", "shtick.fg"),
+                                          (f" · first: SC{findings[0].code} line {findings[0].line}", "shtick.muted"),
+                                          (f" · %lint {words[0]}", "shtick.faint")))
+            if cell.result.interrupted or (runs_limit is not None and runs >= runs_limit):
+                break
+            shell.print(Text(f"watching {words[0]} · saves run it again · q or ctrl+c stops", style="shtick.faint"))
+            with keys_one_by_one(sys.__stdin__.fileno(), enabled=interactive):
+                while mtime() == seen:
+                    if interactive:
+                        ready, _, _ = select.select([sys.__stdin__], [], [], 0.3)
+                        if ready and os.read(sys.__stdin__.fileno(), 64) in (b"q", b"Q", b"\x04", b"\x1b"):
+                            raise KeyboardInterrupt
+                    else:
+                        time.sleep(0.3)
+                time.sleep(0.1)  # editors often write in several steps
+                seen = mtime()
+    except KeyboardInterrupt:
+        pass
+    shell.print(Text(f"stopped watching {words[0]} after {runs} runs", style="shtick.muted"))
+    shell.spacing()

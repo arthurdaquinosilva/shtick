@@ -160,6 +160,63 @@ def m_vars(shell: Shell, args: str):
         shell.print(Text(f"{shell.session.kind} can't list functions, so they aren't shown", style="shtick.faint"))
 
 
+# ── %env ──────────────────────────────────────────────────────────────────
+
+ENV_IGNORE = {"PWD", "OLDPWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING"}
+
+
+def env_snapshot(session: Session) -> dict[str, str]:
+    """The environment a command started from the session would get (exported variables)."""
+    out = session.query("command env -0 2>/dev/null").stdout
+    env: dict[str, str] = {}
+    for record in out.split("\x00"):
+        name, eq, value = record.partition("=")
+        if eq and name and name not in ENV_IGNORE:
+            env[name] = value
+    return env
+
+
+@magic("env", doc="environment changes since the session started: exported, changed and removed variables",
+       usage="What programs started from the session would see differently from when it started.\n"
+             "%env NAME…   show values\n-a           the whole environment")
+def m_env(shell: Shell, args: str):
+    flags, words = take_flags(split_args(args), "-a", "--all")
+    now = env_snapshot(shell.session)
+    if words:
+        for name in words:
+            if name not in now:
+                raise MagicError(f"{name} isn't exported")
+            shell.print(Text.assemble((name, "shtick.fg.bold"), ("=", "shtick.faint"), (now[name], "shtick.string")))
+        return
+    base = shell.env_baseline or {}
+    width = max(20, shell.ui.width - 8)
+
+    def clip(text: str) -> str:
+        text = text.replace("\n", "↵")
+        return text if len(text) <= width else text[: width - 1] + "…"
+
+    rows = []
+    for name in sorted(set(now) | set(base)):
+        new, old = now.get(name), base.get(name)
+        if new is not None and old is None:
+            rows.append(Text.assemble(("+ ", "shtick.added"), (name, "shtick.fg.bold"), ("=", "shtick.faint"), (clip(new), "shtick.string")))
+        elif new is None:
+            rows.append(Text.assemble(("− ", "shtick.deleted"), (name, "shtick.fg.bold"), ("  removed", "shtick.faint")))
+        elif new != old:
+            detail = new
+            if name.endswith("PATH") and ":" in new:
+                added = [p for p in new.split(":") if p not in old.split(":")]
+                removed = [p for p in old.split(":") if p not in new.split(":")]
+                detail = " ".join([*(f"+{p}" for p in added), *(f"-{p}" for p in removed)]) or "reordered"
+            rows.append(Text.assemble(("~ ", "shtick.modified"), (name, "shtick.fg.bold"), ("  ", ""), (clip(detail), "shtick.string")))
+        elif flags:
+            rows.append(Text.assemble(("  ", ""), (name, "shtick.fg"), ("=", "shtick.faint"), (clip(new), "shtick.muted")))
+    for row in rows:
+        shell.print(Text.assemble(("  ", ""), row), no_wrap=True, overflow="ellipsis")
+    if not rows:
+        shell.print(Text("the environment hasn't changed since the session started", style="shtick.muted"))
+
+
 # ── %compare ──────────────────────────────────────────────────────────────
 
 

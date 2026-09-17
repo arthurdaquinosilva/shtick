@@ -249,8 +249,14 @@ class Repl:
         ])
         keybar = Window(FormattedTextControl(self._keybar), height=1)
         modeline = Window(FormattedTextControl(self._modeline), height=1)
-        reserve = ConditionalContainer(Window(height=MENU_HEIGHT), filter=has_completions)
-        body = HSplit([bar, self.search, Window(height=1), keybar, Window(height=1), modeline, reserve])
+        def menu_rows() -> Dimension:
+            state = self.buffer.complete_state
+            n = len(state.completions) if state else 0
+            return Dimension.exact(max(1, min(MENU_HEIGHT, n)))
+
+        reserve = ConditionalContainer(Window(height=menu_rows), filter=has_completions)
+        # room for the completion menu right under the input, so it never covers the key bar
+        body = HSplit([bar, reserve, self.search, Window(height=1), keybar, Window(height=1), modeline])
         root = FloatContainer(
             content=body,
             floats=[
@@ -286,14 +292,16 @@ class Repl:
         if self.app.editing_mode != EditingMode.VI:
             return None
         mode = self.app.vi_state.input_mode
-        return "NORMAL" if mode == InputMode.NAVIGATION else "REPLACE" if mode == InputMode.REPLACE else "INSERT"
+        if self.buffer.selection_state is not None:
+            return "VISUAL"
+        return "NORMAL" if mode == InputMode.NAVIGATION else "REPLACE" if mode in (InputMode.REPLACE, InputMode.REPLACE_SINGLE) else "INSERT"
 
     def _keybar_items(self) -> list[tuple[str, str]]:
         if self.buffer.complete_state:
             return [("NEXT", "Tab"), ("ACCEPT", "Enter"), ("CLOSE", "Esc")]
         items: list[tuple[str, str]] = []
         mode = self._vi_mode()
-        if mode == "INSERT":
+        if mode in ("INSERT", "VISUAL", "REPLACE"):
             items.append(("NORMAL MODE", "Esc"))
         elif mode:
             items.append(("INSERT MODE", "i"))
@@ -301,6 +309,8 @@ class Repl:
         script = self.shell.script
         if not text.strip() and script is not None and not script.done:
             items += [("NEXT", "%next"), ("STEP", "%step"), ("REST", "%run")]
+        elif mode == "NORMAL" and not text.strip():
+            items += [("HISTORY", "k j /"), ("EDITOR", "v")]
         elif self._incomplete():
             items += [("NEWLINE", "Enter"), ("RUN ANYWAY", "Enter on 2 blank lines")]
         else:
@@ -467,6 +477,7 @@ class Repl:
 
         @kb.add("c-o", filter=focused)
         @kb.add("f2", filter=focused)
+        @kb.add("v", filter=focused & vi_navigation_mode & ~has_selection)  # like bash and zsh in vi mode
         def _editor(event: KeyPressEvent) -> None:
             event.current_buffer.open_in_editor(validate_and_handle=False)
 

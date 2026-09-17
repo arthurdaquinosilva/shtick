@@ -31,7 +31,9 @@ Everything you type runs in **one long-lived shell process** (bash by default), 
 
 ### Input while a cell runs
 
-A running cell can read from you: type a line and press Enter (`read`, `cat`, a script asking for confirmation). What you type shows on the rail in the accent color; Backspace and Ctrl+U edit the line; **Ctrl+D** ends the cell's input (`cat` finishes). Cells that don't read never see what you type.
+A running cell can read from you: type a line and press Enter (`read`, `cat`, a script asking for confirmation). What you type shows on the rail in the accent color; Backspace and Ctrl+U edit the line; **Ctrl+D** ends the cell's input (`cat` finishes). Cells that don't read never see what you type. What you typed is kept with the cell, so `%test` and saved tests give the cell the same input again.
+
+A `%command` on its own line after shell code runs as its own step, so `shtick -c` and pasted snippets can mix both (lines inside a heredoc are left alone).
 
 **Ctrl+C** interrupts the running cell — the rest of the cell is skipped and the session survives. If the cell ignores it (`trap '' INT`), press Ctrl+C again to kill the session.
 
@@ -49,7 +51,15 @@ Cells run with stdout and stderr on pipes, like a script in a pipeline. Some pro
 - **Grey suggestions** from history; → accepts them. ↑/↓ go through history by what you've typed so far; Ctrl+R searches it.
 - **Pasting** commands from docs works: `$ `, `% ` and `# ` prompts (including `user@host:~$ `) are removed and the output lines between commands are dropped. `> ` continuation lines are kept. (`# ` counts as a prompt only when a command follows, so pasted comments survive.)
 - **Ctrl+O** opens the cell in `$EDITOR`.
-- **vi mode**: `--vi`, `%vi` or `editing_mode = "vi"`. The mode shows as `[INSERT]` / `[NORMAL]`; Enter runs the cell from normal mode.
+
+### vi mode
+
+Start with `shtick --vi`, switch with `%vi` (`%emacs` goes back), or keep it with `%vi --save` (writes `editing_mode = "vi"` to `config.toml`).
+
+- The mode line shows `[INSERT]`, `[NORMAL]`, `[VISUAL]` or `[REPLACE]`, and the cursor changes shape where the terminal supports it.
+- Esc leaves insert mode (quickly — shtick doesn't wait for more of an escape sequence), also when it closes the completion menu.
+- In normal mode the usual motions and operators work (`w b e 0 $ dd cw x p u` …), **Enter runs the cell**, `j`/`k` move through history, `/` and `?` search it, and **`v` opens the cell in `$EDITOR`** like in bash and zsh. With an empty input the key bar reminds you: `HISTORY: k j /  |  EDITOR: v`.
+- Each new prompt starts in insert mode.
 
 ### The key bar
 
@@ -82,11 +92,18 @@ deploy.sh  7 commands  args: staging
 | `%run [-k] [--all]` | run the rest, stopping at the first failure (`-k` keeps going, `--all` starts over) |
 | `%run FILE [args…]` | open and run a file |
 | `%goto N` · `%goto +2` | move the position |
+| `%break 12 30` | breakpoints: `%run` stops before the commands containing those lines (`%break` lists, `-d 12` removes, `--clear`) |
 | `%script` | the outline with the current position |
 | `%edit` | open the script in `$EDITOR`, reload it and keep the position at the same line |
 | `%close` | close it |
 
+At a breakpoint, the session holds the script's state so far: look at it with `%vars`, `%env` or any shell code, then `%next` or `%run` to go on. Breakpoints show as `●` in `%script`.
+
 `shtick deploy.sh staging` opens a script right away. Remember that the script runs *in* the session: an `exit` in it ends the session, and `set -e` stays on afterwards.
+
+### Watching a script
+
+`%watch build.sh [args…]` runs a script and runs it again every time you save it — keep shtick open next to your editor. Each run is a **new process** of the session's shell (`bash build.sh args`), so runs start clean and an `exit` in the script doesn't end your session. After each run, shellcheck's findings for the file are counted (`%lint build.sh` for details). Press `q` or Ctrl+C to stop.
 
 ## Tracing
 
@@ -177,7 +194,7 @@ Turn what you just checked by eye into checks that can run again:
 | `duration < 2s` · `duration > 100ms` | |
 | `sandbox changed PATH` · `sandbox unchanged` | the cell's sandbox changes |
 
-Quote arguments with spaces. `%expect` alone lists the previous cell's checks; `%expect --clear` removes them.
+Quote arguments with spaces; `\n` and `\t` describe multi-line text (`stdout equals "one\ntwo"`). When `equals` fails, a line-by-line diff of expected and actual output is shown. `%expect` alone lists the previous cell's checks; `%expect --clear` removes them.
 
 **`%test`** runs every cell since the session started (or since `%test reset`) again in a **fresh session** of the same shell, and checks each cell's expectations:
 
@@ -201,6 +218,7 @@ Cells without expectations still run, as setup. If any recorded cell ran in the 
 shtick test tests/*.shtick          # every cell and check
 shtick test -q tests/*.shtick       # only failures and the summary
 shtick test --shell dash t.shtick   # against another shell
+shtick test --lint tests/*.shtick   # also show shellcheck findings per cell (they don't fail the run)
 ```
 
 The file format is described in the [configuration guide](configuration.md#test-files). It's still a shell script: `bash build.shtick` runs the code and ignores the checks.
@@ -239,6 +257,10 @@ stderr   —                —                         cell: 1: Bad substitutio
 - with no shells, every installed shell (plus `/bin/bash` on macOS, which is bash 3.2 — Homebrew's is 5.x).
 
 When two shells are the same kind, the headers show their paths.
+
+### `%env`
+
+`%env` shows how the **environment** differs from when the session started — what a program started from the session would see: `+ FOO=bar` exported, `~ PATH  +/opt/tools/bin` (for `…PATH` variables, the entries added and removed), `− LOGNAME` removed. `%env NAME` shows values, `-a` the whole environment.
 
 ### `%vars`
 

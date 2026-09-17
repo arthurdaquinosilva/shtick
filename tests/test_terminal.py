@@ -144,3 +144,33 @@ def test_open_script_from_the_command_line(tmp_path):
         t.wait_for("s.sh 2/2")
     finally:
         t.close()
+
+
+def test_typed_input_is_saved_in_tests(term, tmp_path):
+    term.send('read -r name; echo "hi $name"\r', wait=0.8)
+    term.send("world\r")
+    term.wait_for("│ hi world")
+    term.send("%expect stdout equals 'hi world'\r")
+    term.wait_for("✓ [1]")
+    term.send("%save-test t.shtick\r")
+    term.wait_for("wrote t.shtick")
+    text = (tmp_path / "t.shtick").read_text()
+    assert '#% stdin "world\\n"' in text
+
+
+def test_vi_v_opens_editor_and_visual_mode(tmp_path):
+    t = Terminal(tmp_path, "--vi")
+    try:
+        t.wait_for("[INSERT]")
+        t.send("echo abc", wait=0.1)
+        t.send("\x1b", wait=0.5)
+        t.wait_for("[NORMAL]")
+        t.send("V")
+        t.wait_for("[VISUAL]")
+        t.send("\x1b", wait=0.5)
+        t.wait_for("[NORMAL]")
+        t.send("v", wait=1.0)
+        t.send("\r")
+        t.wait_for("│ abc")
+    finally:
+        t.close()

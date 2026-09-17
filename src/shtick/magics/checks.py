@@ -158,6 +158,12 @@ def show_outcome(shell: Shell, text: str, outcome: testing.Outcome, indent: str 
     if outcome.passed:
         shell.print(Text.assemble((indent, ""), ("✓ ", "shtick.ok"), (text, "shtick.fg")))
     else:
+        if outcome.diff:
+            shell.print(Text.assemble((indent, ""), ("✗ ", "shtick.err.bold"), (text, "shtick.fg")))
+            for line in outcome.diff:
+                style = "shtick.deleted" if line.startswith("-") else "shtick.added" if line.startswith("+") else "shtick.faint" if line.startswith("@@") else "shtick.muted"
+                shell.print(Text.assemble((indent + "    ", ""), (line, style)), no_wrap=True, overflow="ellipsis")
+            return
         shell.print(Text.assemble((indent, ""), ("✗ ", "shtick.err.bold"), (text, "shtick.fg"), ("  got ", "shtick.faint"), (outcome.detail, "shtick.err")))
 
 
@@ -192,7 +198,7 @@ def recorded(shell: Shell) -> testing.TestFile:
     # if any recorded cell ran in the sandbox, the whole test runs in one: never touch the real directory
     sandbox = "copy" if "copy" in modes else "empty" if modes else "off"
     return testing.TestFile(
-        [testing.TestCell(c.code, [e.text for e in c.expectations], c.label) for c in cells],
+        [testing.TestCell(c.code, [e.text for e in c.expectations], c.label, c.stdin or None) for c in cells],
         shell=shell.session.name,
         sandbox=sandbox,
     )

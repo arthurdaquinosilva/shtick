@@ -29,6 +29,7 @@ The name: **sh** + **tick** (✓, a passing check) — and a *shtick* is a routi
 - **Catch mistakes while typing.** shellcheck lints the input as you type and puts the most important finding in the key bar. Typing `tar -x` shows what each flag means.
 - **Try things without fear.** `%sandbox on` runs cells in a throwaway directory and lists the files each cell created, changed or deleted.
 - **Turn experiments into tests.** `%expect exit 0`, `%expect stdout contains "done"`, `%test` to re-run everything in a fresh session, `%save-test` to get a file that `shtick test` checks in CI.
+- **Tight loops.** `%watch build.sh` re-runs a script on every save; `%break 42` stops `%run` at a line so you can look around.
 - **Portable scripts.** `%compare bash dash zsh` runs the same code in each shell side by side; on macOS, `%compare /bin/bash bash` shows what bash 3.2 does differently.
 
 ## Install
@@ -55,6 +56,7 @@ Then run `shtick`. Requires Python 3.10+ on macOS or Linux, and bash. [shellchec
 > %expect file exists dist/app.tar.gz
 > %test                      # re-run all cells in a fresh session, check expectations
 > %save-test build.shtick    # later, in CI: shtick test build.shtick
+> %watch build.sh            # run it again on every save · q stops
 > %compare bash dash         # the previous cell in both shells, side by side
 > %save build-steps.sh       # the cells that worked, as a script
 > %help                      # every key and command
@@ -69,6 +71,8 @@ Then run `shtick`. Requires Python 3.10+ on macOS or Linux, and bash. [shellchec
 | **Ctrl+O** | edit the cell in `$EDITOR` |
 | **Ctrl+C** | clear the input · interrupt a running cell (again: kill the session) |
 | **Ctrl+D** | exit · end a running cell's stdin |
+
+**vi mode**: `shtick --vi`, or `%vi --save` to keep it. Esc for normal mode, Enter runs from normal mode, `j`/`k` history, `/` search, `v` opens `$EDITOR`.
 
 Shift+Enter needs a terminal that reports modified keys (iTerm2, WezTerm, Ghostty, kitty, xterm; inside tmux set `extended-keys on`). Alt+Enter and Ctrl+J work everywhere.
 
@@ -89,7 +93,7 @@ shtick                          # interactive, in bash
 shtick --shell dash             # or sh, zsh, a path like /bin/bash
 shtick deploy.sh staging        # open a script to step through
 shtick -c 'echo hi; false'      # run code as a cell, print the block, exit with its status
-shtick test *.shtick            # run saved tests; exit status 1 if any check fails
+shtick test *.shtick            # run saved tests; exit status 1 if any check fails (--lint: shellcheck too)
 shtick --vi --theme nebula --profile work
 ```
 

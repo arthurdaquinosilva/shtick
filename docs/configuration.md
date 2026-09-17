@@ -24,7 +24,7 @@ save_shebang = ""                       # %save's first line; "" picks #!/usr/bi
 startup = []                            # shell lines run in every new session, e.g. ["set -o pipefail", "export LC_ALL=C"]
 ```
 
-Inside shtick, `%config` lists the current values and `%config name=value` changes one for the session (`%config lint=off`, `%config shell=dash`, `%config theme=matrix`). Settings with a problem are reported as warnings at startup instead of stopping shtick.
+Inside shtick, `%config` lists the current values and `%config name=value` changes one for the session (`%config lint=off`, `%config shell=dash`, `%config theme=matrix`). Add `--save` to also write it to `config.toml` — other lines and comments in the file are kept. `%vi --save` does the same for vi mode. Settings with a problem are reported as warnings at startup instead of stopping shtick.
 
 `startup` lines also run after `%restart`, `%shell` and when a session had to be restarted because the shell exited.
 
@@ -57,6 +57,7 @@ shtick [SCRIPT [ARGS…]]      interactive; with SCRIPT, open it to step through
 shtick test FILE…            run test files; exit status 1 if any check fails
   -s, --shell SHELL          override the shell recorded in the files
   -q, --quiet                only print failing cells and the summary
+  --lint                     show shellcheck findings for each cell (reported, not failures)
 ```
 
 Piping code into shtick (`echo 'ls' | shtick`) runs it like `-c`.
@@ -80,6 +81,7 @@ target=${1:-staging}
 
 - The header's `shell:` is the shell to run with; `sandbox:` is `off` (run in the file's directory), `empty` (a new empty temporary directory) or `copy` (a temporary copy of the file's directory).
 - Each `#%%` line starts a cell (the rest of the line is a label); the lines until the next `#%%` are its code.
+- `#% stdin "…"` (a JSON string) is given to the cell as its input — shtick records what you typed while the cell ran.
 - `#% expect …` lines are checked after the cell, with the same syntax as [`%expect`](features.md#expectations-and-tests).
 
 Since cells and checks are comments, the file is also a valid script, and it's easy to write or edit by hand. Being executable with that shebang, `./deploy.shtick` runs the tests too.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import os
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,35 @@ def load_profile(name: str | None = None) -> Profile:
     profile = Profile(name, config, data)
     profile.ensure()
     return profile
+
+
+def toml_value(value: Any) -> str:
+    import json
+
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(json.dumps(str(v)) for v in value) + "]"
+    return json.dumps(str(value))  # a JSON string is a valid TOML basic string
+
+
+def save_setting(profile: Profile, name: str, value: Any) -> None:
+    """Write `name = value` into config.toml, replacing an existing line and keeping everything else."""
+    path = profile.config_file
+    profile.ensure()
+    lines = path.read_text().split("\n") if path.exists() else []
+    new = f"{name} = {toml_value(value)}"
+    pattern = re.compile(rf"^\s*{re.escape(name)}\s*=")
+    table = next((i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines))
+    for i, line in enumerate(lines[:table]):
+        if pattern.match(line):
+            lines[i] = new
+            break
+    else:
+        while table > 0 and not lines[table - 1].strip():
+            table -= 1
+        lines.insert(table, new)
+    path.write_text("\n".join(lines).rstrip("\n") + "\n")
 
 
 def load_settings(profile: Profile | None) -> tuple[Settings, list[str]]:

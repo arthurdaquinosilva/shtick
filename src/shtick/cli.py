@@ -75,14 +75,21 @@ def test_main(argv: list[str]) -> int:
     parser.add_argument("files", nargs="+", help="test files saved with %%save-test")
     parser.add_argument("-s", "--shell", help="override the shell recorded in the files")
     parser.add_argument("-q", "--quiet", action="store_true", help="only print failures and the summary")
+    parser.add_argument("--lint", action="store_true", help="also run shellcheck on each cell and show its findings (they don't fail the run)")
     opts = parser.parse_args(argv)
 
     from rich.console import Console
     from rich.text import Text
 
-    from shtick import testing
+    from shtick import lint, testing
     from shtick.config import Settings
-    from shtick.engine import ShellNotFound
+    from shtick.engine import ShellNotFound, resolve_shell, shell_info
+
+    def shell_kind(name: str) -> str:
+        try:
+            return shell_info(resolve_shell(name))[0]
+        except ShellNotFound:
+            return "bash"
     from shtick.magics.checks import print_report_cell, print_summary
     from shtick.theme import get_theme
 
@@ -110,9 +117,17 @@ def test_main(argv: list[str]) -> int:
             tf.shell = opts.shell
         out.print(Text.assemble(("● ", "shtick.accent"), (name, "shtick.fg.bold"), (f"  {tf.shell} · {len(tf.cells)} cells", "shtick.muted")))
 
+        lint_count = 0
+
         def on_cell(report: testing.CellReport) -> None:
-            if not opts.quiet or not report.passed:
+            nonlocal lint_count
+            findings = lint.check(report.cell.code, shell_kind(tf.shell), Settings().lint_exclude) if opts.lint else []
+            lint_count += len(findings)
+            if not opts.quiet or not report.passed or findings:
                 print_report_cell(out, report)  # type: ignore[arg-type]
+            for f in findings:
+                out.print(Text.assemble(("    ⚠ ", "shtick.warn"), (f"SC{f.code} ", "shtick.accent"), (f"line {f.line}: ", "shtick.faint"),
+                                        (f.message, "shtick.muted")), no_wrap=True, overflow="ellipsis")
 
         cwd = os.path.dirname(os.path.abspath(name))
         try:
@@ -123,6 +138,12 @@ def test_main(argv: list[str]) -> int:
             continue
         out.print()
         print_summary(out, report)  # type: ignore[arg-type]
+        if opts.lint:
+            if lint.shellcheck_path() is None:
+                out.print(Text("--lint: shellcheck isn't installed", style="shtick.warn"))
+            else:
+                out.print(Text(f"shellcheck: {lint_count} findings" if lint_count else "shellcheck: no findings",
+                               style="shtick.warn" if lint_count else "shtick.muted"))
         out.print()
         failed += 0 if report.passed else 1
     return 1 if failed else 0

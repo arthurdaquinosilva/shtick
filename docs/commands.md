@@ -13,15 +13,22 @@ Clear the screen.
 
 ### `%config`
 
-Show or change settings: %config · %config name · %config name=value.
+Show or change settings: %config · %config name · %config name=value [--save].
 
 ```text
-Settings for this session. To keep them, put them in config.toml (see %config).
+Changes last for this session; --save also writes the value to config.toml.
+Settings are described in docs/configuration.md.
 ```
 
 ### `%editmode`, `%vi`, `%emacs`
 
-Switch key bindings: %editmode vi|emacs (or %vi / %emacs).
+Switch key bindings: %vi · %emacs · %editmode vi|emacs [--save].
+
+```text
+vi: Esc for normal mode (shown as [NORMAL] in the mode line), Enter runs from normal mode,
+v opens the cell in $EDITOR, / searches history, j/k move through history.
+--save keeps the choice in config.toml; shtick --vi starts in vi mode once.
+```
 
 ### `%exit`, `%quit`
 
@@ -56,6 +63,19 @@ For programs that check [ -t 1 ] or only print colors on a terminal. stderr is m
 ```
 
 ## Scripts & tracing
+
+### `%break`, `%b`
+
+Breakpoints for %run in the open script: %break LINE… · %break · -d LINE · --clear.
+
+```text
+%break 12 30    stop %run before the commands containing lines 12 and 30
+%break          list breakpoints
+%break -d 12    remove one
+%break --clear  remove all
+
+At a breakpoint, inspect the session (%vars, any shell code), then %next or %run to go on.
+```
 
 ### `%close`
 
@@ -114,6 +134,18 @@ Each command is listed with its line, nesting and function, with variables expan
 separately from the output.
 ```
 
+### `%watch`
+
+Run a script again every time it's saved: %watch FILE [args…] · q or ctrl+c stops.
+
+```text
+Each run is a new process of the session's shell (`bash FILE args`), so every run starts clean
+and an `exit` in the script doesn't end your session. After each run, shellcheck's findings are
+counted. Stop with q or Ctrl+C.
+
+--runs N   stop after N runs
+```
+
 ## Linting, sandbox & tests
 
 ### `%expect`
@@ -123,6 +155,7 @@ Check the last cell and record it for %test: %expect exit 0 · stdout contains "
 ```text
 exit N · exit != N · exit nonzero · ok · fails
 stdout|stderr|output  contains TEXT · not-contains TEXT · equals TEXT · matches REGEX · empty · not-empty · lines N
+  (TEXT may use \n and \t: stdout equals "one\ntwo")
 file exists PATH · file missing PATH · file contains PATH TEXT · dir exists PATH
 duration < 2s · duration < 500ms
 sandbox changed PATH · sandbox unchanged
@@ -231,6 +264,16 @@ Run code in fresh sessions of several shells, side by side: %compare [shells…]
 
 Each shell gets a new session in its own empty temporary directory (--here: the current directory).
 Rows that differ between shells are highlighted.
+```
+
+### `%env`
+
+Environment changes since the session started: exported, changed and removed variables.
+
+```text
+What programs started from the session would see differently from when it started.
+%env NAME…   show values
+-a           the whole environment
 ```
 
 ### `%vars`

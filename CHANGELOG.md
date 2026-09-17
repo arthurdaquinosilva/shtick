@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **vi mode**: `v` in normal mode opens the cell in `$EDITOR`, `[VISUAL]` and `[REPLACE]` in the mode line, normal-mode hints in the key bar, `%vi --save`.
+- `%config name=value --save` writes settings to `config.toml`, keeping the rest of the file.
+- `%watch FILE` re-runs a script on every save, with a shellcheck summary per run.
+- `%break LINE` breakpoints for `%run`.
+- `%env` shows environment changes since the session started.
+- Input typed into a cell is recorded and replayed by `%test` and saved tests (`#% stdin`).
+- A failing `equals` expectation shows a diff; `\n` and `\t` work in expectation text.
+- `shtick test --lint` shows shellcheck findings per cell.
+- `%command` lines after shell code in the same input run as their own step.
+- The completion menu no longer covers the key bar.
+
 ## 0.1.0
 
 First release.

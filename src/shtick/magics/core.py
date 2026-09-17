@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import fields
 from typing import TYPE_CHECKING
@@ -15,7 +16,7 @@ from rich.text import Text
 
 from shtick.config import Settings, setting_names
 from shtick.engine import ShellNotFound, available_shells
-from shtick.magics import MAGICS, ORDER, MagicError, MagicSpec, magic, magic_docs, split_args
+from shtick.magics import MAGICS, ORDER, MagicError, MagicSpec, magic, magic_docs, split_args, take_flags
 from shtick.theme import PALETTES
 
 if TYPE_CHECKING:
@@ -121,10 +122,26 @@ def m_theme(shell: Shell, args: str):
     shell.print(Text.assemble(("theme → ", "shtick.muted"), (name, "shtick.accent.bold")))
 
 
-@magic("config", doc="show or change settings: %config · %config name · %config name=value",
-       usage="Settings for this session. To keep them, put them in config.toml (see %config).")
+def save(shell: Shell, name: str) -> None:
+    from shtick.config import save_setting
+    from shtick.paths import short_path
+
+    if shell.profile is None:
+        raise MagicError("no profile to save to")
+    try:
+        save_setting(shell.profile, name, getattr(shell.settings, name))
+    except OSError as e:
+        raise MagicError(f"can't write {shell.profile.config_file}: {e.strerror or e}") from None
+    shell.print(Text(f"saved in {short_path(shell.profile.config_file)}", style="shtick.faint"))
+
+
+@magic("config", doc="show or change settings: %config · %config name · %config name=value [--save]",
+       usage="Changes last for this session; --save also writes the value to config.toml.\n"
+             "Settings are described in docs/configuration.md.")
 def m_config(shell: Shell, args: str):
-    a = args.strip()
+    flag_re = re.compile(r"(?:^|\s)--save(?=\s|$)")
+    flags = bool(flag_re.search(args))
+    a = flag_re.sub(" ", args).strip()
     if not a:
         table = Table(box=box.SIMPLE_HEAD, border_style="shtick.border", header_style="shtick.accent.bold", show_edge=False, pad_edge=False)
         table.add_column("setting", style="shtick.fg.bold", no_wrap=True)
@@ -149,6 +166,8 @@ def m_config(shell: Shell, args: str):
     except ValueError as e:
         raise MagicError(str(e)) from None
     shell.print(Text.assemble((key, "shtick.fg.bold"), (" = ", "shtick.faint"), (repr(getattr(shell.settings, key)), "shtick.string")))
+    if flags:
+        save(shell, key)
 
 
 @magic("shell", doc="show or switch the session's shell: %shell dash · %shell /bin/bash",
@@ -188,14 +207,21 @@ def m_clear(shell: Shell, args: str):
     sys.__stdout__.flush()
 
 
-@magic("editmode", "vi", "emacs", doc="switch key bindings: %editmode vi|emacs (or %vi / %emacs)")
+@magic("editmode", "vi", "emacs", doc="switch key bindings: %vi · %emacs · %editmode vi|emacs [--save]",
+       usage="vi: Esc for normal mode (shown as [NORMAL] in the mode line), Enter runs from normal mode,\n"
+             "v opens the cell in $EDITOR, / searches history, j/k move through history.\n"
+             "--save keeps the choice in config.toml; shtick --vi starts in vi mode once.")
 def m_editmode(shell: Shell, args: str):
-    words = split_args(args)
+    flags, words = take_flags(split_args(args), "--save", "-s")
     mode = words[0].lower() if words else shell.current_command
     if mode not in ("vi", "emacs"):
         raise MagicError("editmode must be vi or emacs")
     shell.settings.editing_mode = mode
     shell.print(Text.assemble(("editing mode → ", "shtick.muted"), (mode, "shtick.accent.bold")))
+    if flags:
+        save(shell, "editing_mode")
+    elif shell.profile is not None:
+        shell.print(Text(f"for this session · %{mode} --save keeps it", style="shtick.faint"))
 
 
 @magic("exit", "quit", doc="leave shtick")
