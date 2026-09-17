@@ -56,7 +56,7 @@ def help_panel() -> RenderableType:
         g.add_column(style="shtick.accent.bold", no_wrap=True)
         g.add_column(style="shtick.muted")
         for k, v in rows:
-            g.add_row(k, v)
+            g.add_row(Text(k), Text(v))  # plain text: [args] isn't markup
         return g
 
     def section(title: str, body: RenderableType) -> RenderableType:

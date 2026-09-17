@@ -320,6 +320,9 @@ class FlagHinter:
         command, done, current = info
         if command not in self.cache or not self.cache[command]:
             return None
+        on_flag = current.startswith("-") or (not current and done and document.text_before_cursor.endswith(done[-1] + " "))
+        if not on_flag:
+            return None  # typing an argument: let other hints (lint) have the key bar
         entries: list[tuple[str, Flag | None, bool]] = []
         for word in done:
             entries += [(n, f, False) for n, f, _ in self.lookup(command, word)]

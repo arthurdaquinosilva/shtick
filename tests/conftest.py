@@ -12,7 +12,9 @@ def installed(*names):
 
 
 # Every shell dialect we support, plus macOS's bash 3.2 when it's there.
-SHELLS = installed("bash", "dash", "zsh") + (["/bin/bash"] if os.path.exists("/bin/bash") and shutil.which("bash") != "/bin/bash" else [])
+SHELLS = installed("bash", "dash", "zsh") + (
+    ["/bin/bash"] if os.path.exists("/bin/bash") and os.path.realpath(shutil.which("bash") or "") != os.path.realpath("/bin/bash") else []
+)
 
 
 @pytest.fixture(params=SHELLS)
@@ -34,6 +36,7 @@ def make_shell(tmp_path, monkeypatch, shell="bash"):
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("COLUMNS", "100")
+    monkeypatch.setenv("SHTICK_TEST_VAR", "set")
     return Shell(Settings(shell=shell), profile=None, cwd=str(tmp_path))
 
 

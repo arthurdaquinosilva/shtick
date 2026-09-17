@@ -5,15 +5,17 @@ How a cell runs
 The shell is started non-interactively (`<shell> -s`) in its own process group and reads
 commands from its stdin. Each cell is written to a file and the engine sends one driver line:
 
-    { printf 'TOKEN\\0started\\0' >STATUS; __shtick_status N; . CELL; } <STDIN; printf 'TOKEN\\0%s\\0%s\\0' "$?" "$PWD" >STATUS
+    { printf 'TOKEN\\0started\\0' >STATUS; . CELL; } <STDIN; __shtick_rc=$?; __shtick_in=; __shtick_pending=; printf 'TOKEN\\0%s\\0%s\\0' "$__shtick_rc" "$PWD" >STATUS
 
-* `__shtick_status N` makes `$?` inside the cell equal the previous cell's exit status.
+* The cell file's first line (so line numbers don't move) marks the cell as running and runs
+  `__shtick_status N`, which makes `$?` inside the cell equal the previous cell's exit status.
 * stdout and stderr are pipes, read as they arrive; the exit status and `$PWD` come back on a
   named FIFO tagged with a per-cell random token, so no bookkeeping shows up in the output.
 * The cell's stdin is a FIFO of its own. The engine keeps it open until the shell reports
   "started" (it then holds the read end), so closing it delivers EOF to the cell only.
-* Ctrl+C sends SIGINT to the process group; `trap 'return 130' INT` returns from the sourced
-  cell, so the rest of the cell is skipped and the session survives. bash can be left unable to
+* Ctrl+C sends SIGINT to the process group; the INT trap returns from the sourced cell, so the
+  rest of the cell is skipped and the session survives. An interrupt that lands before the cell
+  started is remembered and honoured by the cell's first line. bash can be left unable to
   run the trap from builtin-only loops after a trap returned while it waited for a child; a
   fork (bash 5) and re-setting the trap (bash 3.2) before the next cell reset that. A second interrupt of the same
   cell kills the session and restarts it.
@@ -105,7 +107,12 @@ def shell_argv(path: str) -> list[str]:
     return [path, "-s"]
 
 
-INT_TRAP = "trap 'return 130 2>/dev/null # shtick' INT"
+# Inside a cell, Ctrl+C returns from it. Between cells (the driver line, before the cell file is sourced),
+# a `return` would fail in bash and exit zsh, so the interrupt is remembered and the cell's first line
+# honours it.
+INT_TRAP = """trap 'if [ -n "${__shtick_in-}" ]; then return 130 2>/dev/null; else __shtick_pending=1; fi # shtick' INT"""
+CELL_PREFIX = '__shtick_in=1; if [ -n "${__shtick_pending-}" ]; then __shtick_pending=; return 130; fi; __shtick_status {status}; '
+
 BOOT = {
     "common": f"{INT_TRAP}\n__shtick_status() {{ return \"$1\"; }}\n",
     # After a trap returned from an interrupted cell, bash 5 won't run the trap from builtin-only
@@ -178,6 +185,11 @@ class Session:
         self._pty_slave: int | None = None
         self._running = False
         self._interrupts = 0
+        self._started = False  # the shell reported that the current cell began
+        self._held_interrupt = False  # Ctrl+C that arrived before that
+        self._interrupt_lock = threading.Lock()
+        self._run_start = 0.0
+        self._interrupt_at = 0.0
         self._after_interrupt = False
         self._lock = threading.RLock()  # one cell at a time (completion queries run from another thread)
         self._start()
@@ -321,7 +333,8 @@ class Session:
         if not self.alive:
             self.restart()
         path = self.cell_path(n)
-        path.write_text(code if code.endswith("\n") else code + "\n")
+        # on the first line, so line numbers in errors and traces stay the same
+        path.write_text(CELL_PREFIX.replace("{status}", str(self.last_status)) + code + ("" if code.endswith("\n") else "\n"))
 
         token = secrets.token_hex(8)
         tty = self.tty
@@ -336,13 +349,16 @@ class Session:
         status = quote(str(self.status_path))
         prefix = "__shtick_reset_int; " if self._after_interrupt and self.kind == "bash" else ""
         line = (
-            f"{prefix}{{ command printf '{token}\\0started\\0' >{status}; __shtick_status {self.last_status}; . {quote(str(path))}; }} {redirect}; "
-            f"command printf '{token}\\0%s\\0%s\\0' \"$?\" \"$PWD\" >{status}\n"
+            f"{prefix}{{ command printf '{token}\\0started\\0' >{status}; . {quote(str(path))}; }} {redirect}; "
+            f"__shtick_rc=$?; __shtick_in=; __shtick_pending=; command printf '{token}\\0%s\\0%s\\0' \"$__shtick_rc\" \"$PWD\" >{status}\n"
         )
         self._after_interrupt = False
         self._interrupts = 0
+        self._started = False
+        self._held_interrupt = False
+        self._interrupt_at = 0.0
 
-        start = time.perf_counter()
+        start = self._run_start = time.perf_counter()
         try:
             self._write(line)
         except BrokenPipeError:
@@ -421,6 +437,7 @@ class Session:
 
         buf = b""
         started = False
+        resent = False
         stdin_open = cell_in >= 0
         prefix = token.encode() + b"\0"
         try:
@@ -438,7 +455,12 @@ class Session:
                         except BlockingIOError:
                             continue
                         if not started and buf.startswith(prefix + b"started\0"):
-                            started = True
+                            with self._interrupt_lock:
+                                started = self._started = True
+                                if self._held_interrupt:
+                                    self._held_interrupt = False
+                                    self._signal(signal.SIGINT)
+
                             buf = buf[len(prefix) + 8:]
                             if eof_after_started and stdin_open:
                                 os.close(cell_in)
@@ -489,6 +511,14 @@ class Session:
                                 stdin_open = False
                             else:
                                 eof_after_started = True
+                if (
+                    not resent and self._interrupts == 1 and self._interrupt_at
+                    and self._interrupt_at - self._run_start < 0.05 and time.perf_counter() - self._interrupt_at > 0.2
+                ):
+                    # An interrupt right as the cell started can hit a child between fork and exec, which
+                    # then runs to the end; the shell's trap only fires afterwards. Deliver it once more.
+                    resent = True
+                    self._signal(signal.SIGINT)
                 if proc.poll() is not None:
                     self._drain(streams, emit)
                     result.died = True
@@ -522,7 +552,22 @@ class Session:
             return
         self._interrupts += 1
         self._after_interrupt = True
-        sig = signal.SIGINT if self._interrupts == 1 else signal.SIGKILL
+        if self._interrupts > 1:
+            self._signal(signal.SIGKILL)
+            return
+        self._interrupt_at = time.perf_counter()
+        with self._interrupt_lock:
+            if self._running and not self._started:
+                # The shell is still reading the driver line: zsh would discard it. Nothing of the cell
+                # runs yet, so hold the interrupt until the shell reports the cell started.
+                self._held_interrupt = True
+                return
+        self._signal(signal.SIGINT)
+
+    def _signal(self, sig: int) -> None:
+        proc = self.proc
+        if proc is None:
+            return
         try:
             os.killpg(proc.pid, sig)
         except OSError:

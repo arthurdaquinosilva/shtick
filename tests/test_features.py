@@ -364,6 +364,23 @@ def test_flag_parsing():
     assert "-e" in flags
 
 
+def test_flag_hints_only_while_on_a_flag():
+    from prompt_toolkit.document import Document
+
+    from shtick.completer import Flag, FlagHinter
+
+    hinter = FlagHinter(lambda: None)
+    hinter.cache["rm"] = {"-r": Flag(("-r",), "", "Recursive."), "-f": Flag(("-f",), "", "Force.")}
+
+    def hint(text):
+        rendered = hinter.render(Document(text, len(text)), 100)
+        return "".join(t for _, t, *_ in rendered) if rendered else None
+
+    assert hint("rm -rf") == "rm  -r recursive · -f Force."
+    assert hint("rm -rf ") is not None
+    assert hint("rm -rf $dir/") is None
+
+
 def test_command_words():
     from prompt_toolkit.document import Document
 
@@ -380,11 +397,11 @@ def test_command_words():
 
 
 def test_vars_shows_changes(any_shell, capfd):
-    run(any_shell, 'x=41; multi="a\nb"; f() { echo hi; }; unset LOGNAME')
+    run(any_shell, 'x=41; multi="a\nb"; f() { echo hi; }; unset SHTICK_TEST_VAR')
     capfd.readouterr()
     any_shell.run_cell("%vars")
     out = capfd.readouterr().out
-    assert "+ x=" in out and "+ multi=" in out and "− LOGNAME" in out
+    assert "+ x=" in out and "+ multi=" in out and "− SHTICK_TEST_VAR" in out
     assert "RANDOM" not in out and "__shtick" not in out
     if any_shell.session.kind in ("bash", "zsh"):
         assert "+ f()" in out

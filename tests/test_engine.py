@@ -207,3 +207,18 @@ def test_user_int_trap_is_respected(session):
     assert "trapped" in r.stdout and "continued" in r.stdout
     interrupt_later(session, 0.3)
     assert "trapped" in session.run("sleep 1").stdout  # still the user's trap after an interrupt
+
+
+def test_interrupt_right_away_still_stops_the_cell(session):
+    session.run("true")  # the session has booted
+
+    def as_soon_as_running():
+        while not session._running:
+            time.sleep(0.0005)
+        session.interrupt()  # usually before the shell reported that the cell started
+
+    t = threading.Thread(target=as_soon_as_running)
+    t.start()
+    r = session.run("sleep 5; echo NOT")
+    t.join()
+    assert r.exit == 130 and r.duration < 3 and "NOT" not in r.stdout
