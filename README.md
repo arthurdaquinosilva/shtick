@@ -35,6 +35,14 @@ The name: **sh** + **tick** (✓, a passing check) — and a *shtick* is a routi
 ## Install
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/install.sh | sh
+```
+
+The script puts shtick in its own virtual environment (`~/.local/share/shtick/venv`) and links the `shtick` command into `~/.local/bin`, telling you if that isn't on your `PATH`. Run it again to upgrade; add `-s -- 0.1.1` after `sh` for a specific version, or `-s -- --uninstall` to remove it (your config and history stay). [Read it first](https://github.com/arthurdaquinosilva/shtick/blob/main/install.sh) if you like — it's short.
+
+Or with a Python package manager:
+
+```sh
 pipx install shtick     # the `shtick` command everywhere, isolated from your projects
 pip install shtick      # or into the current environment
 ```

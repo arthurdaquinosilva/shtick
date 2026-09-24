@@ -32,3 +32,23 @@ jobs:
         run: python -m pytest -q --timeout 120
       - name: Docs are up to date
         run: python scripts/gen_command_docs.py --check
+
+  install-script:
+    # Runs install.sh the way `curl … | sh` does, installing this checkout into a fresh HOME.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with install.sh
+        run: |
+          export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
+          SHTICK_PACKAGE="$GITHUB_WORKSPACE" sh < install.sh
+          "$HOME/.local/bin/shtick" -c 'echo installed'
+          sh install.sh --uninstall
+          test ! -e "$HOME/.local/bin/shtick"

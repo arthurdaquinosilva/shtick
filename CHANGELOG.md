@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **One-line install**: `curl -fsSL https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/install.sh | sh` installs shtick into its own virtual environment and links `shtick` into `~/.local/bin`. It takes a version, `--uninstall`, and `SHTICK_VENV`, `SHTICK_BIN_DIR`, `SHTICK_PYTHON`, `SHTICK_PACKAGE`.
+
 ## 0.1.1
 
 - **New color themes**, no longer shared with ember: `tide` (blue-black with a teal accent, the new default), `phosphor` (amber, like an old CRT) and `chalk` (for light terminal backgrounds). `void`, `nebula` and `matrix` are gone; a config that names one gets a warning and the default theme.

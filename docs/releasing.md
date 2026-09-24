@@ -36,8 +36,10 @@ The first successful release creates the project on PyPI and turns the pending p
 Publishing the release runs the workflow, which builds the sdist and wheel, checks them, and uploads to PyPI. Afterwards:
 
 ```sh
-pipx install shtick   # or: pip install shtick
+curl -fsSL https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/install.sh | sh   # or: pipx install shtick
 ```
+
+`install.sh` is served straight from `main` and installs the newest version on PyPI, so it needs no change per release. Keep it working on plain `sh` (dash): the tests run it through shellcheck, and the `install-script` CI job installs the checkout with it on Linux and macOS.
 
 ## Trying a release first (optional)
 
