@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The shell's `history` (and `fc -l`) lists the session's cells in bash and zsh, instead of printing nothing.
+
 ## 0.1.3
 
 - `aliases`: an imported alias whose command doesn't exist in the session — typically one that calls a function from your startup files, like oh-my-zsh's `history` → `omz_history` — is left out instead of failing with "command not found".

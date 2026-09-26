@@ -32,6 +32,7 @@ import os
 import pty
 import secrets
 import selectors
+import shlex
 import shutil
 import signal
 import subprocess
@@ -578,6 +579,15 @@ class Session:
     def query(self, code: str) -> CellResult:
         """Run bookkeeping code (listing variables, …) without touching `$?` or showing output."""
         return self.run(code, check=False, internal=True)
+
+    def add_to_history(self, code: str) -> None:
+        """Put a cell in the shell's own history, so `history` and `fc -l` list the cells.
+
+        A non-interactive shell records nothing by itself (and turning that on in bash would record
+        the driver lines), so each cell is added as it runs. dash and sh have no history."""
+        add = {"bash": "history -s -- ", "zsh": "print -rs -- "}.get(self.kind)
+        if add:
+            self.query(add + shlex.quote(code))
 
 
 def _write_all(fd: int, data: bytes) -> None:

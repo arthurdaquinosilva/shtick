@@ -545,3 +545,16 @@ def test_command_lines_split_multi_line_input(shell, capfd):
     out = capfd.readouterr().out
     assert "+ x=" in out
     assert shell.cells[-1].result.stdout == "%not-a-command\n"
+
+
+@pytest.mark.parametrize("shell_name", [s for s in ("bash", "zsh") if shutil.which(s)])
+def test_history_builtin_lists_the_cells(tmp_path, shell_name):
+    from shtick.shell import Shell
+
+    sh = Shell(Settings(shell=shell_name), cwd=str(tmp_path))
+    try:
+        cell = run(sh, "echo one", "%config", "x='a\\tb'; echo \"$x\"", "history")
+        lines = cell.result.stdout.splitlines()
+        assert [line.split(None, 1)[1] for line in lines] == ["echo one", "x='a\\tb'; echo \"$x\"", "history"]
+    finally:
+        sh.close()

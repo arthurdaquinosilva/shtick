@@ -227,6 +227,7 @@ The file format is described in the [configuration guide](configuration.md#test-
 
 - **`%save FILE`** writes the cells of this session that **succeeded** into a script, with a shebang for the session's shell (`#!/usr/bin/env bash`, or the exact path when you picked one like `/bin/bash`), and makes it executable. `%commands` are never included. `%save FILE 3-7 10` takes a range; `-a` includes failed cells; `-f` overwrites. In the sandbox, relative paths are saved in the original directory, not the throwaway one.
 - **`%history`** shows this session's cells; `-n` numbers, `-s` exit statuses (✓/✗), `-l N` the last N across sessions, `-g PATTERN` searches every session. Ranges: `4`, `4-6`, `4:7` (end excluded), `~1/` (the previous session), `~1/2-3`, `12/1-4` (session 12).
+- The shell's own **`history`** (and `fc -l`) lists the cells of the current session too, in bash and zsh: each cell is added to the shell's history as it runs. It starts empty after `%restart`; `%history` keeps everything.
 - **`%rerun [range]`** runs cells again; **`%recall [range]`** puts them into the input to edit.
 
 History is kept in SQLite (see [configuration](configuration.md#where-things-live)).

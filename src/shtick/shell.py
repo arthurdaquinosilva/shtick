@@ -319,6 +319,7 @@ class Shell:
         n = self.count
         if record:
             self.history.store_input(n, code)
+            self.session.add_to_history(code)
         if echo:
             self.echo(code, label)
 
