@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.4
 
 - The shell's `history` (and `fc -l`) lists the session's cells in bash and zsh, instead of printing nothing.
 
