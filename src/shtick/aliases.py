@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 
-from shtick.engine import shell_kind
+from shtick.engine import Session, shell_kind
 
 TIMEOUT = 15  # seconds for the interactive shell to load its startup files
 
@@ -116,14 +116,63 @@ def _list(path: str) -> str:
     return listing
 
 
-def definitions(aliases: list[Alias], target: str) -> tuple[str, int]:
-    """Code that defines the aliases in a `target` session, and how many had to be skipped."""
+def usable(aliases: list[Alias], target: str) -> list[Alias]:
+    """The aliases a `target` session can define."""
     names = NAME.get(target, NAME["posix"])
-    lines: list[str] = []
-    for a in aliases:
-        if (a.kind and target != "zsh") or not names.fullmatch(a.name):
-            continue
-        flag = {"global": "-g ", "suffix": "-s "}.get(a.kind, "")
-        dashes = "-- " if target in ("bash", "zsh") else ""
-        lines.append(f"alias {flag}{dashes}{shlex.quote(a.name + '=' + a.value)}")
-    return "\n".join(lines), len(aliases) - len(lines)
+    return [a for a in aliases if (not a.kind or target == "zsh") and names.fullmatch(a.name)]
+
+
+def definitions(aliases: list[Alias], target: str) -> str:
+    """Code that defines (already `usable`) aliases in a `target` session."""
+    dashes = "-- " if target in ("bash", "zsh") else ""
+    return "\n".join(
+        f"alias {FLAG.get(a.kind, '')}{dashes}{shlex.quote(a.name + '=' + a.value)}" for a in aliases
+    )
+
+
+FLAG = {"global": "-g ", "suffix": "-s "}
+ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*", re.S)
+WORD = re.compile(r"[A-Za-z0-9_./+@%:,-]+")
+
+
+def command_word(value: str) -> str:
+    """The command an alias runs (after any VAR=value prefixes), or "" when it isn't a plain word."""
+    try:
+        words = shlex.split(value, comments=True)
+    except ValueError:
+        words = value.split()
+    for word in words:
+        if not ASSIGNMENT.fullmatch(word):
+            word = word.lstrip("\\")
+            return word if WORD.fullmatch(word) else ""
+    return ""
+
+
+def define(session: Session, aliases: list[Alias]) -> list[Alias]:
+    """Define the aliases the session's shell can use and returns them.
+
+    Aliases often call functions from the startup files (oh-my-zsh's `history` runs `omz_history`),
+    and functions aren't imported, so an alias whose command doesn't exist in the session is removed
+    again — the name then means what it means in a plain shell. Checked after all are defined, so
+    an alias may run another alias; repeated because removing one can break those that ran it.
+    """
+    kept = usable(aliases, session.kind)
+    if not kept:
+        return kept
+    session.query(definitions(kept, session.kind))
+    dashes = "-- " if session.kind in ("bash", "zsh") else ""
+    for _ in range(4):
+        words = {a.name: command_word(a.value) for a in kept if not a.kind}
+        check = " ".join(sorted({shlex.quote(w) for w in words.values() if w}))
+        if not check:
+            break
+        listing = session.query(
+            f'for __shtick_w in {check}; do command -v -- "$__shtick_w" >/dev/null 2>&1 || printf \'%s\\n\' "$__shtick_w"; done; unset __shtick_w'
+        )
+        missing = set(listing.stdout.splitlines())
+        broken = [a for a in kept if words.get(a.name) in missing]
+        if not broken:
+            break
+        session.query(f"unalias {dashes}" + " ".join(shlex.quote(a.name) for a in broken) + " 2>/dev/null")
+        kept = [a for a in kept if a not in broken]
+    return kept

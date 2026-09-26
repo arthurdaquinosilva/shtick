@@ -147,9 +147,7 @@ class Shell:
         except aliases.AliasError as e:
             self.warn(str(e))
             return
-        code, _ = aliases.definitions(found, self.session.kind)
-        if code:
-            self.session.query(code)
+        aliases.define(self.session, found)
 
     def switch_shell(self, shell: str) -> None:
         cwd = self.session.cwd

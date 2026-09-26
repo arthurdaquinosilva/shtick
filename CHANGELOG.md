@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `aliases`: an imported alias whose command doesn't exist in the session — typically one that calls a function from your startup files, like oh-my-zsh's `history` → `omz_history` — is left out instead of failing with "command not found".
+
 ## 0.1.2
 
 - **Your aliases in shtick**: `aliases = "auto"` in `config.toml` (or `%config aliases=zsh`) imports the aliases of your interactive shell into every session, keeping the ones the session's shell understands.

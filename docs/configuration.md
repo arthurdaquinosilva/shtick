@@ -36,6 +36,7 @@ Sessions start **non-interactively** and without startup files: bash with `--nop
 `aliases = "auto"` brings the aliases of your interactive shell into every session. shtick starts `$SHELL -i` once (or the shell you name: `"zsh"`, `"bash"`), asks it for its aliases and defines them before the `startup` lines, so `startup` can still change one. Only aliases go across — not functions, variables or options — and the rest of your startup files have no effect on cells.
 
 - Each session gets the aliases its own shell understands: zsh's global (`alias -g`) and suffix (`alias -s`) aliases only reach zsh sessions, and dash skips names it can't define.
+- An alias whose command doesn't exist in the session is left out — usually one that calls a function from your startup files, like oh-my-zsh's `history` (`omz_history`). The name then means what it does in a plain shell. For shtick's own history of cells, use `%history`.
 - They're read once per run of shtick. `%config aliases=auto` reads them again, e.g. after you add one to `~/.zshrc`.
 - `%test` and `shtick test` don't import them (nor run `startup`), so a test that uses an alias fails there — as it would in CI. The same goes for scripts written by `%save`.
 - In bash, an alias defined in a cell works from the next cell on: bash expands aliases when it reads a cell, before running it.
