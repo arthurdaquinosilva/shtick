@@ -127,6 +127,8 @@ class Shell:
         """Every new session (start, restart, %shell, after the shell exited): startup lines, %vars baseline."""
         from shtick.magics.inspect import env_snapshot, snapshot
 
+        if self.settings.aliases:
+            self._define_aliases()
         for line in self.settings.startup:
             result = self.session.query(line)
             if result.exit != 0:
@@ -135,6 +137,19 @@ class Shell:
             snapshot(self.session)  # the first listing makes zsh autoload a few parameters (LOGCHECK, WATCHFMT…)
         self.vars_baseline = snapshot(self.session)
         self.env_baseline = env_snapshot(self.session)
+
+    def _define_aliases(self, refresh: bool = False) -> None:
+        """The `aliases` setting: define the interactive shell's aliases in this session (before `startup`)."""
+        from shtick import aliases
+
+        try:
+            found = aliases.load(self.settings.aliases, refresh)
+        except aliases.AliasError as e:
+            self.warn(str(e))
+            return
+        code, _ = aliases.definitions(found, self.session.kind)
+        if code:
+            self.session.query(code)
 
     def switch_shell(self, shell: str) -> None:
         cwd = self.session.cwd
@@ -163,6 +178,8 @@ class Shell:
         elif name == "tty":
             self.session.set_tty(value)
         setattr(self.settings, name, value)
+        if name == "aliases" and value:
+            self._define_aliases(refresh=True)  # also picks up aliases added since
 
     def close(self) -> None:
         if self.sandbox is not None:

@@ -22,6 +22,7 @@ lint_exclude = ["SC2034", "SC2154"]     # checks skipped for cells (they see var
 tty = false                             # run cells attached to a pseudo-terminal (%tty)
 save_shebang = ""                       # %save's first line; "" picks #!/usr/bin/env <shell>
 startup = []                            # shell lines run in every new session, e.g. ["set -o pipefail", "export LC_ALL=C"]
+aliases = ""                            # import your aliases: "auto" ($SHELL), "zsh" or "bash"; "" is off
 ```
 
 Inside shtick, `%config` lists the current values and `%config name=value` changes one for the session (`%config lint=off`, `%config shell=dash`, `%config theme=matrix`). Add `--save` to also write it to `config.toml` — other lines and comments in the file are kept. `%vi --save` does the same for vi mode. Settings with a problem are reported as warnings at startup instead of stopping shtick.
@@ -29,6 +30,15 @@ Inside shtick, `%config` lists the current values and `%config name=value` chang
 `startup` lines also run after `%restart`, `%shell` and when a session had to be restarted because the shell exited.
 
 Sessions start **non-interactively** and without startup files: bash with `--noprofile --norc`, zsh with `-f`, and `BASH_ENV`/`ENV` removed from the environment — cells behave like a script, not like your login shell. Put what your scripts expect in `startup`. In bash, aliases are enabled (`shopt -s expand_aliases`).
+
+### Your aliases
+
+`aliases = "auto"` brings the aliases of your interactive shell into every session. shtick starts `$SHELL -i` once (or the shell you name: `"zsh"`, `"bash"`), asks it for its aliases and defines them before the `startup` lines, so `startup` can still change one. Only aliases go across — not functions, variables or options — and the rest of your startup files have no effect on cells.
+
+- Each session gets the aliases its own shell understands: zsh's global (`alias -g`) and suffix (`alias -s`) aliases only reach zsh sessions, and dash skips names it can't define.
+- They're read once per run of shtick. `%config aliases=auto` reads them again, e.g. after you add one to `~/.zshrc`.
+- `%test` and `shtick test` don't import them (nor run `startup`), so a test that uses an alias fails there — as it would in CI. The same goes for scripts written by `%save`.
+- In bash, an alias defined in a cell works from the next cell on: bash expands aliases when it reads a cell, before running it.
 
 ## Environment variables
 

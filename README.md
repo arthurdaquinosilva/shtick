@@ -121,7 +121,7 @@ shtick is built on [prompt_toolkit](https://github.com/prompt-toolkit/python-pro
 
 - **Not a login shell.** shtick is for writing and testing scripts, not for replacing zsh or bash day to day. There's no job control (`fg`, `bg`, Ctrl+Z).
 - **No full-screen programs in cells.** vim, htop, less or an ssh session need a real terminal; run them outside shtick. `%tty on` helps programs that only check whether they're on a terminal (colors, `[ -t 1 ]`), at the cost of merging stderr into stdout.
-- **Cells run non-interactively**, like scripts: `read -p` prompts aren't printed unless `%tty on`, aliases are expanded (bash), no `.bashrc` is read.
+- **Cells run non-interactively**, like scripts: `read -p` prompts aren't printed unless `%tty on`, no `.bashrc` or `.zshrc` is read — set `aliases = "auto"` in the [config](https://github.com/arthurdaquinosilva/shtick/blob/main/docs/configuration.md#your-aliases) to bring your aliases in.
 - **`exit`, `exec` and a failing command under `set -e` end the session.** shtick says so and starts a new one in the same directory, but variables and functions are gone.
 - **The sandbox is a working directory**, not a security boundary: absolute paths, `cd ..` and `$HOME` reach the real filesystem (the footer warns when a cell leaves it).
 - **Linting** needs shellcheck, which doesn't support zsh.

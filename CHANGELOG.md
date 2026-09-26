@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Your aliases in shtick**: `aliases = "auto"` in `config.toml` (or `%config aliases=zsh`) imports the aliases of your interactive shell into every session, keeping the ones the session's shell understands.
 - **One-line install**: `curl -fsSL https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/install.sh | sh` installs shtick into its own virtual environment and links `shtick` into `~/.local/bin`. It takes a version, `--uninstall`, and `SHTICK_VENV`, `SHTICK_BIN_DIR`, `SHTICK_PYTHON`, `SHTICK_PACKAGE`.
 
 ## 0.1.1

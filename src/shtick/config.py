@@ -23,6 +23,7 @@ class Settings:
     tty: bool = False
     save_shebang: str = ""  # %save: "" picks `#!/usr/bin/env <shell>`
     startup: list[str] = field(default_factory=list)  # shell lines run in every new session
+    aliases: str = ""  # import the aliases of an interactive shell: "" (off) · "auto" ($SHELL) · "zsh" · "bash"
 
     def validate(self, name: str, value: Any) -> Any:
         """Coerce and check a value for setting `name`; raises ValueError/KeyError."""
@@ -45,6 +46,8 @@ class Settings:
             value = [str(v) for v in value]
         elif isinstance(default, str):
             value = str(value).strip().strip("'\"")
+        if name == "aliases" and value.lower() in ("off", "no", "false", "none"):
+            value = ""
         if name == "editing_mode":
             value = value.lower()
             if value not in EDITING_MODES:
