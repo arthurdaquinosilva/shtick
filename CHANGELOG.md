@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5
 
 - **Fix**: → (and Ctrl+E, Ctrl+F) accepts the grey suggestion from history again; Alt+F accepts its next word.
 
