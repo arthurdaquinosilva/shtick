@@ -174,3 +174,19 @@ def test_vi_v_opens_editor_and_visual_mode(tmp_path):
         t.wait_for("│ abc")
     finally:
         t.close()
+
+
+@pytest.mark.parametrize("args", [(), ("--vi",)])
+def test_right_arrow_accepts_the_suggestion(tmp_path, args):
+    t = Terminal(tmp_path, *args)
+    try:
+        t.send("echo suggested-thing\r", wait=0.5)
+        t.wait_for("│ suggested-thing")
+        t.send("echo sugg", wait=0.3)  # the rest shows in grey, from history
+        t.send("\x1b[C", wait=0.3)  # →
+        t.send("\r", wait=0.8)
+        lines = t.text().splitlines()
+        assert sum(line.strip() == "│ suggested-thing" for line in lines) == 2, t.text()
+        assert not any(line.strip() == "│ sugg" for line in lines), t.text()
+    finally:
+        t.close()

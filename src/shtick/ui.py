@@ -26,7 +26,8 @@ from prompt_toolkit.filters import (
 )
 from prompt_toolkit.formatted_text import StyleAndTextTuples
 from prompt_toolkit.input.ansi_escape_sequences import ANSI_SEQUENCES
-from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent, merge_key_bindings
+from prompt_toolkit.key_binding.bindings.auto_suggest import load_auto_suggest_bindings
 from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout import (
@@ -269,7 +270,8 @@ class Repl:
         )
         app = Application(
             layout=Layout(root),
-            key_bindings=self._bindings(),
+            # → / Ctrl+E / Ctrl+F accept the grey suggestion: PromptSession adds these, Application doesn't
+            key_bindings=merge_key_bindings([load_auto_suggest_bindings(), self._bindings()]),
             style=DynamicStyle(lambda: self.shell.theme.pt_style),
             include_default_pygments_style=False,
             erase_when_done=True,

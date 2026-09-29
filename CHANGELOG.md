@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Fix**: → (and Ctrl+E, Ctrl+F) accepts the grey suggestion from history again; Alt+F accepts its next word.
+
 ## 0.1.4
 
 - The shell's `history` (and `fc -l`) lists the session's cells in bash and zsh, instead of printing nothing.
