@@ -92,7 +92,7 @@ class Shell:
         self.next_input = ""
         self.last_duration: float | None = None
         self.last_status: int | None = None
-        self.flash: str | None = None  # a one-off message for the mode line
+        self.flash: str | None = None  # a one-off message for the footer
         self.sandbox: Sandbox | None = None
         self.script: Script | None = None
         self.step_pending: int | None = None

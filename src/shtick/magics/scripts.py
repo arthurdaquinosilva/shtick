@@ -117,7 +117,7 @@ def _run_chunks(shell: Shell, count: int | None, keep_going: bool) -> None:
             stop(f"command {i + 1} failed (exit {cell.result.status}) — stopped · %run -k keeps going")
             return
     if count is not None and not script.done:
-        return  # the footer and the mode line already say where we are
+        return  # the block's status line and the prompt's footer already say where we are
     if script.done:
         shell.print(Text.assemble(("✓ ", "shtick.ok"), (f"reached the end of {script.name}", "shtick.muted")))
     else:

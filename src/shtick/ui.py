@@ -1,4 +1,4 @@
-"""The interactive prompt: a full-width input bar, a context-aware key bar and a mode line."""
+"""The interactive prompt, in querky's style: a ruled input, a one-line footer and `?` for shortcuts."""
 
 from __future__ import annotations
 

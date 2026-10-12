@@ -44,7 +44,7 @@ def render_findings(shell: Shell, source: str, findings: list[lint.Finding], nam
 
 @magic("lint", doc="shellcheck report for the last cell, a file, or the open script: %lint [FILE | script | N]",
        usage="%lint           the previous cell\n%lint N         cell N\n%lint FILE      a file\n%lint script    the open script\n\n"
-             "While typing, the most important finding is shown in the key bar (%config lint=off to hide it).\n"
+             "While typing, the most important finding is shown in the footer under the prompt (%config lint=off to hide it).\n"
              "Codes in the lint_exclude setting are skipped (cells often use variables set in other cells).")
 def m_lint(shell: Shell, args: str):
     if lint.shellcheck_path() is None:

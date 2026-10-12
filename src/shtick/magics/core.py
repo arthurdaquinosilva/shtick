@@ -208,7 +208,7 @@ def m_clear(shell: Shell, args: str):
 
 
 @magic("editmode", "vi", "emacs", doc="switch key bindings: %vi · %emacs · %editmode vi|emacs [--save]",
-       usage="vi: Esc for normal mode (shown as [NORMAL] in the mode line), Enter runs from normal mode,\n"
+       usage="vi: Esc for normal mode (the footer's -- INSERT -- goes away, as in vim), Enter runs from normal mode,\n"
              "v opens the cell in $EDITOR, / searches history, j/k move through history.\n"
              "--save keeps the choice in config.toml; shtick --vi starts in vi mode once.")
 def m_editmode(shell: Shell, args: str):
