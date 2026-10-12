@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- **A new look**, in querky's style: the input sits between two horizontal rules, with a one-line footer under them instead of the filled bar, key bar and mode line. The left side shows the flag hint or the shellcheck finding while you type, `%next · %step · %run` while a script is open, `-- INSERT --` in vi mode, or `? for shortcuts`; the right side shows the next cell's `[N]` and the session status. `?` on an empty prompt lists the shortcuts, and completions are a plain list under the prompt.
+- **Blocks without a rail**: a cell's output hangs under a `⎿` marker, five columns in (stderr still in red), and the exit-status line closes the block. `%command` output hangs under its own `⎿` too. The spinner reads `✻ Running… (2s · ctrl+c to interrupt)`.
+- Ctrl+C on an empty prompt now exits on a second press within 1.5 seconds; Ctrl+D still exits.
+
 ## 0.1.5
 
 - **Fix**: → (and Ctrl+E, Ctrl+F) accepts the grey suggestion from history again; Alt+F accepts its next word.
