@@ -274,8 +274,8 @@ class Repl:
 
     def _prompt_prefix(self, line_number: int, wrap_count: int) -> StyleAndTextTuples:
         if line_number == 0 and not wrap_count:
-            return [("class:prompt", "> ")]
-        return [("class:prompt.cont", "  ")]
+            return [("class:rule.prompt", "> ")]
+        return [("class:rule.prompt.cont", "  ")]
 
     def _vi_mode(self) -> str | None:
         if self.app.editing_mode != EditingMode.VI:
