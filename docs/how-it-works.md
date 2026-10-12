@@ -16,7 +16,7 @@ __shtick_rc=$?; __shtick_in=; __shtick_pending=; printf 'TOKEN\0%s\0%s\0' "$__sh
 and the cell file's first line — the same line as your code's first line, so line numbers don't move — starts with `__shtick_in=1; …; __shtick_status N;`.
 
 - **Sourcing** (`.`) runs the cell in the current shell, so variables, functions, `cd` and options stay. `return` inside a cell ends the cell, like in a sourced script.
-- **stdout and stderr are separate pipes**, read as data arrives, which is how stderr gets its own rail.
+- **stdout and stderr are separate pipes**, read as data arrives, which is how stderr gets its own color.
 - **Completion is reported on a named FIFO**, tagged with a random per-cell token: the exit status and `$PWD`, NUL-separated. Nothing extra appears in the output, and a stale report can't be mistaken for the current cell's. When the report arrives, whatever is already in the output pipes is read; output from background jobs that arrives later is shown above the prompt.
 - `__shtick_status N` (a function that `return`s N) makes `$?` at the start of the cell the previous cell's status.
 - `__shtick_in` marks that a cell is running (see Ctrl+C below). Variables starting with `__shtick` are hidden from `%vars` and completion.
@@ -26,7 +26,7 @@ and the cell file's first line — the same line as your code's first line, so l
 
 Each cell's stdin is a FIFO of its own. shtick opens it read-write before sending the cell, so data written early is kept, and closes it only after the shell reported `started` — meaning the shell holds the read end, so closing delivers end-of-file to *that cell*. Without that handshake, a cell with no input could block forever opening the FIFO.
 
-While a cell runs, the terminal is in non-canonical mode and shtick forwards what you type: printable keys are echoed on the rail, Enter sends the line, Ctrl+D closes the cell's stdin. In `%tty` mode the cell's stdin, stdout and stderr are a pseudo-terminal instead, which does its own echo and line editing.
+While a cell runs, the terminal is in non-canonical mode and shtick forwards what you type: printable keys are echoed in the cell's output, Enter sends the line, Ctrl+D closes the cell's stdin. In `%tty` mode the cell's stdin, stdout and stderr are a pseudo-terminal instead, which does its own echo and line editing.
 
 ## Ctrl+C
 
@@ -62,7 +62,7 @@ If a cell ignores SIGINT, a second Ctrl+C sends SIGKILL to the process group and
 
 ## Smart Enter
 
-Whether Enter runs the input is decided by `bash -n` (or `zsh -n` in zsh sessions) on the text, never by guessing: only the parser's messages about running out of input (`unexpected end of file`, `unexpected EOF while looking for`, the here-document warning) count as unfinished. Other syntax errors count as complete, so running shows the error. Results are cached per text, so redrawing the key bar doesn't fork a shell each time.
+Whether Enter runs the input is decided by `bash -n` (or `zsh -n` in zsh sessions) on the text, never by guessing: only the parser's messages about running out of input (`unexpected end of file`, `unexpected EOF while looking for`, the here-document warning) count as unfinished. Other syntax errors count as complete, so running shows the error. Results are cached per text, so redrawing the footer doesn't fork a shell each time.
 
 ## Trade-offs
 

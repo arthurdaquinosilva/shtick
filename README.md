@@ -24,9 +24,9 @@ The name: **sh** + **tick** (✓, a passing check) — and a *shtick* is a routi
 
 ## Why shtick
 
-- **Readable runs.** Every cell is a block: your code, its output on a rail (stderr in red), and a footer with the exit status, time and directory. Variables, functions, `cd` and `set` options carry over between cells.
+- **Readable runs.** Every cell is a block: your code, its output under a `⎿` (stderr in red), and a status line with the exit status, time and directory. Variables, functions, `cd` and `set` options carry over between cells.
 - **Know what a script does.** Open a script and step through it command by command (`%open`, `%next`, `%step`), or `%trace` it to see every command that ran — with variables expanded — apart from the output.
-- **Catch mistakes while typing.** shellcheck lints the input as you type and puts the most important finding in the key bar. Typing `tar -x` shows what each flag means.
+- **Catch mistakes while typing.** shellcheck lints the input as you type and puts the most important finding in the footer under the prompt. Typing `tar -x` shows what each flag means.
 - **Try things without fear.** `%sandbox on` runs cells in a throwaway directory and lists the files each cell created, changed or deleted.
 - **Turn experiments into tests.** `%expect exit 0`, `%expect stdout contains "done"`, `%test` to re-run everything in a fresh session, `%save-test` to get a file that `shtick test` checks in CI.
 - **Tight loops.** `%watch build.sh` re-runs a script on every save; `%break 42` stops `%run` at a line so you can look around.
@@ -77,7 +77,7 @@ Then run `shtick`. Requires Python 3.10+ on macOS or Linux, and bash. [shellchec
 | **Tab** | complete commands, files, `$variables` and `%commands` |
 | **→** · **↑ ↓** · Ctrl+R | accept the grey suggestion · history · search history |
 | **Ctrl+O** | edit the cell in `$EDITOR` |
-| **Ctrl+C** | clear the input · interrupt a running cell (again: kill the session) |
+| **Ctrl+C** | clear the input (on an empty prompt, twice to exit) · interrupt a running cell (again: kill the session) |
 | **Ctrl+D** | exit · end a running cell's stdin |
 
 **vi mode**: `shtick --vi`, or `%vi --save` to keep it. Esc for normal mode, Enter runs from normal mode, `j`/`k` history, `/` search, `v` opens `$EDITOR`.

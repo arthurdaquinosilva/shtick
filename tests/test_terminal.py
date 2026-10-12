@@ -44,6 +44,14 @@ class Terminal:
                 return self.text()
         raise AssertionError(f"{needle!r} never appeared on screen:\n{self.text()}")
 
+    def wait_until_gone(self, needle, timeout=10.0):
+        end = time.time() + timeout
+        while time.time() < end:
+            self.pump(0.1)
+            if needle not in self.text():
+                return self.text()
+        raise AssertionError(f"{needle!r} never went away:\n{self.text()}")
+
     def send(self, keys, wait=0.3):
         self.child.send(keys)
         self.pump(wait)
@@ -61,49 +69,54 @@ def term(tmp_path):
 
 def test_layout_and_a_block(term):
     screen = term.text()
-    assert "RUN: Enter" in screen and "HELP: %help" in screen
-    assert "bash" in screen  # mode line
+    assert "? for shortcuts" in screen and "─" * 20 in screen
+    assert "bash" in screen  # status, right of the footer
+    term.send("?")
+    term.wait_for("%help all commands")
+    term.send("\x7f")  # any other key closes the panel
+    term.wait_until_gone("%help all commands")
     term.send("echo hello; echo oops >&2; false\r")
     screen = term.wait_for("exit 1")
     assert "> echo hello; echo oops >&2; false" in screen
-    assert "│ hello" in screen and "│ oops" in screen
-    assert "[2]" in screen  # the input bar counts cells
+    assert "  ⎿  hello" in screen and "     oops" in screen
+    assert "[2]" in screen  # the footer counts cells
 
 
 def test_smart_enter_and_shift_enter(term):
     term.send("for i in 1 2; do\r")
     term.send("echo $i\r")
-    term.wait_for("NEWLINE: Enter")  # unfinished: Enter adds a line
+    term.wait_for("enter adds a line")  # unfinished: Enter adds a line
     term.send("done\r")
     screen = term.wait_for("exit 0")
-    assert "│ 1" in screen and "│ 2" in screen
+    assert "  ⎿  1" in screen and "     2" in screen
     term.send("echo a\x1b[13;2u")  # Shift+Enter in CSI-u form
     term.send("echo b\r")
-    screen = term.wait_for("│ b")
-    assert "NEWLINE: Shift+Enter" in screen
+    term.wait_for("     b")
+    term.send("?")
+    term.wait_for("shift+enter new line")
 
 
 def test_ctrl_c_interrupts_the_cell_not_shtick(term):
     term.send("keep=yes; sleep 30\r", wait=1.0)
-    term.wait_for("running")
+    term.wait_for("Running…")
     term.send("\x03")
     term.wait_for("interrupted")
     term.send('echo "keep=$keep"\r')
-    term.wait_for("│ keep=yes")
+    term.wait_for("⎿  keep=yes")
 
 
 def test_typing_input_for_read(term):
     term.send('read -r name; echo "hi $name"\r', wait=0.8)
     term.send("world\r")
-    screen = term.wait_for("│ hi world")
-    assert "│ world" in screen
+    screen = term.wait_for("     hi world")
+    assert "  ⎿  world" in screen  # what was typed, then the cell's reply
 
 
 def test_ctrl_d_ends_stdin_then_exits(term):
     term.send("cat; echo after\r", wait=0.8)
     term.send("line\r")
     term.send("\x04")
-    term.wait_for("│ after")
+    term.wait_for("     after")
     term.send("\x04")  # empty prompt: exit
     term.wait_for("goodbye")
 
@@ -117,18 +130,18 @@ def test_live_lint_in_key_bar(term):
 def test_flag_hints(term):
     term.send("ls -l")
     screen = term.wait_for("ls  -l", timeout=15)
-    assert "RUN: Enter" not in screen.split("ls  -l")[1]
+    assert "? for shortcuts" not in screen.split("ls  -l")[1]
 
 
 def test_vi_mode_escape(tmp_path):
     t = Terminal(tmp_path, "--vi")
     try:
-        t.wait_for("[INSERT]")
+        t.wait_for("-- INSERT --")
         t.send("echo vi", wait=0.1)
         t.send("\x1b", wait=0.5)
-        t.wait_for("[NORMAL]")
+        t.wait_until_gone("-- INSERT --")  # NORMAL mode shows no label, as in vim
         t.send("\r")
-        t.wait_for("│ vi")
+        t.wait_for("⎿  vi")
     finally:
         t.close()
 
@@ -138,9 +151,9 @@ def test_open_script_from_the_command_line(tmp_path):
     t = Terminal(tmp_path, "s.sh")
     try:
         t.wait_for("s.sh  2 commands")
-        t.wait_for("NEXT: %next")
+        t.wait_for("%next · %step · %run")
         t.send("%next\r")
-        t.wait_for("│ one")
+        t.wait_for("⎿  one")
         t.wait_for("s.sh 2/2")
     finally:
         t.close()
@@ -149,7 +162,7 @@ def test_open_script_from_the_command_line(tmp_path):
 def test_typed_input_is_saved_in_tests(term, tmp_path):
     term.send('read -r name; echo "hi $name"\r', wait=0.8)
     term.send("world\r")
-    term.wait_for("│ hi world")
+    term.wait_for("     hi world")
     term.send("%expect stdout equals 'hi world'\r")
     term.wait_for("✓ [1]")
     term.send("%save-test t.shtick\r")
@@ -161,17 +174,17 @@ def test_typed_input_is_saved_in_tests(term, tmp_path):
 def test_vi_v_opens_editor_and_visual_mode(tmp_path):
     t = Terminal(tmp_path, "--vi")
     try:
-        t.wait_for("[INSERT]")
+        t.wait_for("-- INSERT --")
         t.send("echo abc", wait=0.1)
         t.send("\x1b", wait=0.5)
-        t.wait_for("[NORMAL]")
+        t.wait_until_gone("-- INSERT --")
         t.send("V")
-        t.wait_for("[VISUAL]")
+        t.wait_for("-- VISUAL --")
         t.send("\x1b", wait=0.5)
-        t.wait_for("[NORMAL]")
+        t.wait_until_gone("-- VISUAL --")
         t.send("v", wait=1.0)
         t.send("\r")
-        t.wait_for("│ abc")
+        t.wait_for("⎿  abc")
     finally:
         t.close()
 
@@ -181,12 +194,12 @@ def test_right_arrow_accepts_the_suggestion(tmp_path, args):
     t = Terminal(tmp_path, *args)
     try:
         t.send("echo suggested-thing\r", wait=0.5)
-        t.wait_for("│ suggested-thing")
+        t.wait_for("⎿  suggested-thing")
         t.send("echo sugg", wait=0.3)  # the rest shows in grey, from history
         t.send("\x1b[C", wait=0.3)  # →
         t.send("\r", wait=0.8)
         lines = t.text().splitlines()
-        assert sum(line.strip() == "│ suggested-thing" for line in lines) == 2, t.text()
-        assert not any(line.strip() == "│ sugg" for line in lines), t.text()
+        assert sum(line.strip() == "⎿  suggested-thing" for line in lines) == 2, t.text()
+        assert not any(line.strip() == "⎿  sugg" for line in lines), t.text()
     finally:
         t.close()

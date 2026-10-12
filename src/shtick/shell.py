@@ -23,7 +23,7 @@ from shtick.engine import CellResult, Session, ShellNotFound
 from shtick.history import HistoryManager
 from shtick.magics import MAGICS, MagicError
 from shtick.paths import fit_path, short_path
-from shtick.output import LineInput, Rail, RailState, Spinner, format_duration
+from shtick.output import BlockWriter, LineInput, Marker, Rail, RailState, Spinner, format_duration
 from shtick.syntax import MAGIC_RE, is_unfinished
 from shtick.theme import PALETTES, Theme, get_theme
 
@@ -81,6 +81,8 @@ class Shell:
         self.profile = profile
         self.theme: Theme = get_theme(self.settings.theme)
         self.ui = self._make_console()
+        self.marker = Marker()
+        self._blocks: list[tuple[Any, int | None]] = []
         self.history = HistoryManager(profile.history_db if profile else None)
         self.start_dir = os.path.abspath(cwd or os.getcwd())
         self.session = self._new_session(self.settings.shell, self.start_dir)
@@ -202,8 +204,41 @@ class Shell:
         return cap.get()
 
     def rail_line(self, *parts: tuple[str, str]) -> None:
-        """A line inside the current block, after the output."""
-        self.print(Text.assemble(("│ ", "shtick.rail"), *parts))
+        """A line inside the current block, after the output. With no parts, a blank line (none
+        before anything has been written, so a block never opens on an empty line)."""
+        if not parts:
+            if self.marker.used:
+                self.print()
+            return
+        self.print(Text.assemble((self.marker.take_plain(), "shtick.faint"), *parts))
+
+    @contextmanager
+    def block(self) -> Iterator[None]:
+        """%command output printed inside hangs under the block's `⎿`, five columns in."""
+        ui = self.ui
+        real, saved_width = ui.file, getattr(ui, "_width", None)
+        ui.file = BlockWriter(real, self.marker)
+        ui.width = max(20, ui.width - 3)  # five columns of prefix, less the two-space indent it replaces
+        self._blocks.append((real, saved_width))
+        try:
+            yield
+        finally:
+            self._blocks.pop()
+            ui.file, ui._width = real, saved_width
+
+    @contextmanager
+    def outside_block(self) -> Iterator[None]:
+        """Cells a %command runs are blocks of their own, not part of the command's output."""
+        if not self._blocks:
+            yield
+            return
+        ui = self.ui
+        inner, inner_width = ui.file, getattr(ui, "_width", None)
+        ui.file, ui._width = self._blocks[-1]
+        try:
+            yield
+        finally:
+            ui.file, ui._width = inner, inner_width
 
     def spacing(self) -> None:
         self.print("\n")  # two blank lines between blocks
@@ -256,11 +291,11 @@ class Shell:
             if spec is None:
                 close = difflib.get_close_matches(name, MAGICS, n=1)
                 raise MagicError(f"unknown command %{name}" + (f" — did you mean %{close[0]}?" if close else " — see %help"))
-            result = spec.fn(self, args)
+            with self.block():
+                result = spec.fn(self, args)
         except MagicError as e:
-            if not self._magic_cells:
-                self.print()
-            self.error(str(e))
+            with self.block():
+                self.error(str(e))
             self.last_status = 1
             self._magic_cells = 0  # the error closes the block
         finally:
@@ -272,6 +307,7 @@ class Shell:
         return result
 
     def echo(self, source: str, label: str = "") -> None:
+        self.marker = Marker(self._ansi(("  ⎿  ", "shtick.faint")))  # a new block starts under this input
         grid = Table.grid(padding=0)
         grid.add_column(width=2, no_wrap=True)
         grid.add_column(ratio=1)
@@ -286,7 +322,7 @@ class Shell:
                 content.add_row(Syntax(body, "bash", theme=self.theme.syntax_theme, background_color="default", word_wrap=True))
         else:
             content = Syntax(source, "bash", theme=self.theme.syntax_theme, background_color="default", word_wrap=True)
-        grid.add_row(Text(">", style="shtick.accent.bold"), content)
+        grid.add_row(Text(">", style="shtick.muted"), content)
         if label:
             self.print(Text.assemble(("  ", ""), ("▸ ", "shtick.accent"), (label, "shtick.label")))
         self.print(grid)
@@ -309,7 +345,12 @@ class Shell:
 
     def execute(self, code: str, label: str = "", trace: bool = False, echo: bool = True, record: bool = True,
                 source: tuple[str, int] | None = None) -> Cell:
-        """Run shell code as a numbered cell and draw it: echo, railed output, footer."""
+        """Run shell code as a numbered cell and draw it: echo, output under `⎿`, footer."""
+        with self.outside_block():
+            return self._execute(code, label, trace, echo, record, source)
+
+    def _execute(self, code: str, label: str, trace: bool, echo: bool, record: bool,
+                 source: tuple[str, int] | None) -> Cell:
         code = code.strip("\n")
         if self._magic_depth:
             if not self._magic_cells:
@@ -324,19 +365,16 @@ class Shell:
             self.echo(code, label)
 
         before = self.sandbox.snapshot() if self.sandbox is not None else None
-        rails = {
-            "out": self._ansi(("│ ", "shtick.rail")),
-            "err": self._ansi(("│ ", "shtick.rail.err")),
-            "in": self._ansi(("│ ", "shtick.accent")),
-        }
+        if not echo:
+            self.marker = Marker(self._ansi(("  ⎿  ", "shtick.faint")))
         start_err, _, reset = self._ansi(("\x00", "shtick.stderr")).partition("\x00")
-        state = RailState(rails, {"err": (start_err, reset)})
+        state = RailState(self.marker, {"err": (start_err, reset)})
         spinner = Spinner(
             sys.__stdout__,
             state,
             lambda frame, elapsed: self._ansi(
-                ("╰─ ", "shtick.border"), (frame, "shtick.accent"), (" running ", "shtick.muted"),
-                (format_duration(elapsed), "shtick.faint"), ("  ctrl+c to interrupt", "shtick.faint"),
+                (frame + " ", "shtick.accent"), ("Running…", "shtick.accent"),
+                (f" ({format_duration(elapsed)} · ctrl+c to interrupt)", "shtick.faint"),
             ),
         )
         rail = Rail(sys.__stdout__, state, spinner)
@@ -362,7 +400,7 @@ class Shell:
 
         interactive_input = sys.__stdin__.isatty()
         start_in, _, reset_in = self._ansi(("\x00", "shtick.input")).partition("\x00")
-        line_input = LineInput(rail, rails["in"], (start_in, reset_in))
+        line_input = LineInput(rail, (start_in, reset_in))
         typed: list[bytes] = []
 
         def on_input(data: bytes) -> tuple[bytes, bool]:
@@ -420,7 +458,7 @@ class Shell:
     def _show_syntax_error(self, message: str) -> None:
         self.rail_line()
         for line in message.split("\n"):
-            self.print(Text.assemble(("│ ", "shtick.rail.err"), (line, "shtick.stderr")))
+            self.print(Text.assemble((self.marker.take_plain(), "shtick.faint"), (line, "shtick.stderr")))
         self.rail_line()
 
     def _show_trace(self, cell: Cell, wrote: bool) -> None:
@@ -457,7 +495,7 @@ class Shell:
 
     def footer(self, cell: Cell) -> None:
         r = cell.result
-        parts: list[tuple[str, str]] = [("╰─ ", "shtick.border")]
+        parts: list[tuple[str, str]] = [(self.marker.take_plain(), "shtick.faint")]
         sep = (" · ", "shtick.faint")
         if r.syntax_error is not None:
             parts += [("✗ ", "shtick.err.bold"), ("syntax error", "shtick.err"), (" · not run", "shtick.faint")]

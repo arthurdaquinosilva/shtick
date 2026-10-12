@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import threading
 import time
 
 from prompt_toolkit.application import Application
@@ -32,8 +33,6 @@ from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout import (
     ConditionalContainer,
-    Float,
-    FloatContainer,
     FormattedTextControl,
     HSplit,
     Layout,
@@ -68,6 +67,7 @@ from shtick.shell import Shell
 from shtick.syntax import has_prompts, is_complete, strip_prompts
 
 INDENT = "  "
+EXIT_WINDOW = 1.5  # seconds a first Ctrl+C on an empty prompt waits for the second
 
 # Terminals only tell Shift+Enter apart from Enter when asked. While the prompt is open we request
 # xterm's modifyOtherKeys (level 1), which terminals like xterm, iTerm2, WezTerm, Ghostty and tmux
@@ -174,6 +174,9 @@ class Repl:
     def __init__(self, shell: Shell):
         self.shell = shell
         self.flash: tuple[str, float] | None = None
+        self.exit_armed_until = 0.0
+        self.show_shortcuts = False
+        self._keep_shortcuts = False  # set by the `?` key so the after-key hook doesn't close the panel at once
         self.shift_enter_works = False  # flips once the terminal delivers a real Shift+Enter
         self.linter = lint.BackgroundLinter(self._invalidate)
         self.hinter = FlagHinter(self._invalidate)
@@ -231,45 +234,25 @@ class Repl:
             ),
             height=Dimension(min=1, max=16),
             wrap_lines=True,
-            get_line_prefix=self._bar_prefix,
+            get_line_prefix=self._prompt_prefix,
             dont_extend_height=True,
-            style="class:bar",
         )
 
     def _build_app(self) -> Application:
-        pad = lambda **kw: Window(style="class:bar", **kw)  # noqa: E731
-        bar = HSplit([
-            pad(height=1),
-            VSplit([
-                pad(width=2),
-                self._input_window(),
-                Window(FormattedTextControl(self._bar_counter), dont_extend_width=True, style="class:bar"),
-                pad(width=2),
-            ]),
-            pad(height=1),
-        ])
-        keybar = Window(FormattedTextControl(self._keybar), height=1)
-        modeline = Window(FormattedTextControl(self._modeline), height=1)
-        def menu_rows() -> Dimension:
-            state = self.buffer.complete_state
-            n = len(state.completions) if state else 0
-            return Dimension.exact(max(1, min(MENU_HEIGHT, n)))
-
-        reserve = ConditionalContainer(Window(height=menu_rows), filter=has_completions)
-        # room for the completion menu right under the input, so it never covers the key bar
-        body = HSplit([bar, reserve, self.search, Window(height=1), keybar, Window(height=1), modeline])
-        root = FloatContainer(
-            content=body,
-            floats=[
-                Float(
-                    xcursor=True,
-                    ycursor=True,
-                    content=CompletionsMenu(max_height=MENU_HEIGHT, scroll_offset=1, extra_filter=has_focus(DEFAULT_BUFFER)),
-                )
-            ],
+        rule = lambda: Window(char="─", height=1, style="class:rule")  # noqa: E731
+        shortcuts = Condition(lambda: self.show_shortcuts)
+        menu = ConditionalContainer(
+            VSplit([Window(width=2), CompletionsMenu(max_height=MENU_HEIGHT, scroll_offset=1, extra_filter=has_focus(DEFAULT_BUFFER))]),
+            filter=has_completions,
         )
+        panel = ConditionalContainer(
+            Window(FormattedTextControl(self._shortcuts_panel), dont_extend_height=True),
+            filter=shortcuts & ~has_completions,
+        )
+        footer = ConditionalContainer(Window(FormattedTextControl(self._footer), height=1), filter=~shortcuts & ~has_completions)
+        body = HSplit([rule(), self._input_window(), rule(), self.search, menu, panel, footer])
         app = Application(
-            layout=Layout(root),
+            layout=Layout(body),
             # → / Ctrl+E / Ctrl+F accept the grey suggestion: PromptSession adds these, Application doesn't
             key_bindings=merge_key_bindings([load_auto_suggest_bindings(), self._bindings()]),
             style=DynamicStyle(lambda: self.shell.theme.pt_style),
@@ -279,16 +262,20 @@ class Repl:
             cursor=ModalCursorShapeConfig(),
         )
         app.ttimeoutlen = 0.05  # escape sequences arrive together; don't make vi users wait on Esc
-        app.key_processor.after_key_press += lambda _: app.invalidate()
+        app.key_processor.after_key_press += self._after_key
         return app
 
-    def _bar_prefix(self, line_number: int, wrap_count: int) -> StyleAndTextTuples:
-        if wrap_count:
-            return [("class:bar.cont", "  ")]
-        return [("class:bar.prompt", "> ")] if line_number == 0 else [("class:bar.cont", "· ")]
+    def _after_key(self, _processor) -> None:
+        if self._keep_shortcuts:
+            self._keep_shortcuts = False
+        else:
+            self.show_shortcuts = False
+        self.app.invalidate()
 
-    def _bar_counter(self) -> StyleAndTextTuples:
-        return [("class:bar.count", f"  [{self.shell.count + 1}]")]
+    def _prompt_prefix(self, line_number: int, wrap_count: int) -> StyleAndTextTuples:
+        if line_number == 0 and not wrap_count:
+            return [("class:prompt", "> ")]
+        return [("class:prompt.cont", "  ")]
 
     def _vi_mode(self) -> str | None:
         if self.app.editing_mode != EditingMode.VI:
@@ -298,91 +285,106 @@ class Repl:
             return "VISUAL"
         return "NORMAL" if mode == InputMode.NAVIGATION else "REPLACE" if mode in (InputMode.REPLACE, InputMode.REPLACE_SINGLE) else "INSERT"
 
-    def _keybar_items(self) -> list[tuple[str, str]]:
-        if self.buffer.complete_state:
-            return [("NEXT", "Tab"), ("ACCEPT", "Enter"), ("CLOSE", "Esc")]
-        items: list[tuple[str, str]] = []
-        mode = self._vi_mode()
-        if mode in ("INSERT", "VISUAL", "REPLACE"):
-            items.append(("NORMAL MODE", "Esc"))
-        elif mode:
-            items.append(("INSERT MODE", "i"))
-        text = self.buffer.text
+    def shortcut_items(self) -> list[tuple[str, str]]:
+        """(key, what it does) for the `?` panel."""
+        items = [
+            ("enter", "run"),
+            ("shift+enter" if self.shift_enter_works else "alt+enter", "new line"),
+            ("tab", "complete"),
+            ("→", "accept the grey suggestion"),
+            ("↑ ↓", "history"),
+            ("ctrl+r", "search history"),
+            ("ctrl+o", "edit in $EDITOR"),
+            ("%help", "all commands"),
+            ("%lint", "shellcheck details"),
+            ("ctrl+c", "clear input / exit"),
+            ("ctrl+d", "exit"),
+        ]
+        if self._vi_mode():
+            items.insert(2, ("esc", "NORMAL mode · v edits"))
         script = self.shell.script
-        if not text.strip() and script is not None and not script.done:
-            items += [("NEXT", "%next"), ("STEP", "%step"), ("REST", "%run")]
-        elif mode == "NORMAL" and not text.strip():
-            items += [("HISTORY", "k j /"), ("EDITOR", "v")]
-        elif self._incomplete():
-            items += [("NEWLINE", "Enter"), ("RUN ANYWAY", "Enter on 2 blank lines")]
-        else:
-            items += [("RUN", "Enter"), ("NEWLINE", "Shift+Enter" if self.shift_enter_works else "Alt+Enter")]
-        items += [("EXIT", "Ctrl+D"), ("EDITOR", "Ctrl+O"), ("HELP", "%help")]
-        return items  # least important last: they're dropped first on narrow terminals
+        if script is not None and not script.done:
+            items[:0] = [("%next", "run the next chunk"), ("%step", "put it in the prompt"), ("%run", "run the rest")]
+        return items
 
-    def _keybar(self) -> StyleAndTextTuples:
-        width = self.app.output.get_size().columns - 4
+    def _shortcuts_panel(self) -> StyleAndTextTuples:
+        items = self.shortcut_items()
+        col = max(get_cwidth(k) + get_cwidth(d) + 1 for k, d in items) + 4
+        per_row = max(1, min(3, (self.app.output.get_size().columns - 2) // col))
+        out: StyleAndTextTuples = []
+        for i in range(0, len(items), per_row):
+            out.append(("", "  "))
+            for key, desc in items[i : i + per_row]:
+                out += [("class:shortcut.key", key), ("class:shortcut.desc", " " + desc), ("", " " * (col - get_cwidth(key) - get_cwidth(desc) - 1))]
+            out.append(("", "\n"))
+        return out[:-1]
+
+    def _footer_left(self, width: int) -> StyleAndTextTuples:
+        if self.flash and time.monotonic() < self.flash[1]:
+            return [("class:status.warn", self.flash[0])]
         text = self.buffer.text
-        if text.strip() and not self.buffer.complete_state:
+        if text.strip():
             if hint := self.hinter.render(self.buffer.document, width):
-                return [("", "  "), *hint]
+                return hint
             finding = self.linter.current(text) if self.shell.settings.lint else None
             if finding and finding.code < 2000 and self._incomplete():
                 finding = None  # "couldn't parse" while the code is still being typed is just noise
             if finding:
                 icon = "✗" if finding.severity == "error" else "⚠" if finding.severity == "warning" else "·"
                 line = f"line {finding.line}: " if "\n" in text else ""
-                out: StyleAndTextTuples = [
-                    ("", "  "), (f"class:lint.{finding.severity}", f"{icon} {finding.label}"), ("class:lint.code", f"  {line}"),
-                    ("class:lint.text", finding.message), ("class:keybar.sep", "  |  "), ("class:keybar.label", "DETAILS"), ("class:keybar.key", ": %lint"),
+                return [
+                    (f"class:lint.{finding.severity}", f"{icon} {finding.label}"), ("class:lint.code", f"  {line}"),
+                    ("class:lint.text", finding.message), ("class:footer.hint", "  · %lint"),
                 ]
-                return out if _width(out) <= width + 2 else _truncate(out[:5], width + 2)
-        items = self._keybar_items()
+        script = self.shell.script
+        if not text.strip() and script is not None and not script.done:
+            return [("class:footer.hint", "%next · %step · %run")]
+        if self._incomplete():
+            return [("class:footer.hint", "unfinished · enter adds a line, twice on blank lines runs")]
+        mode = self._vi_mode()
+        if mode == "NORMAL":
+            return []
+        if mode:
+            return [("class:footer.mode", f"-- {mode} --")]
+        return [("class:footer.hint", "? for shortcuts")]
 
-        def render(entries: list[tuple[str, str]]) -> StyleAndTextTuples:
-            out: StyleAndTextTuples = [("", "  ")]
-            for i, (label, key) in enumerate(entries):
-                if i:
-                    out.append(("class:keybar.sep", "  |  "))
-                out += [("class:keybar.label", label), ("class:keybar.key", f": {key}")]
-            return out
-
-        while len(items) > 1 and _width(render(items)) > width + 2:
-            items.pop()
-        return render(items)
-
-    def _modeline(self) -> StyleAndTextTuples:
-        out: StyleAndTextTuples = []
-        if mode := self._vi_mode():
-            out += [("class:modeline.mode", f"[{mode}]"), ("", "  ")]
-        else:
-            out.append(("", "  "))  # line up with the key bar
-        if self.flash and time.monotonic() < self.flash[1]:
-            return out + [("class:status.warn", self.flash[0])]
+    def _status(self) -> StyleAndTextTuples:
         shell = self.shell
         sep = ("class:status.sep", "  ·  ")
-        out += [("class:status", shell.session.label)]
+        out: StyleAndTextTuples = [("class:status.dim", f"[{shell.count + 1}]"), sep, ("class:status", shell.session.label)]
         sandbox = shell.sandbox
         cwd = shell.session.cwd
+        if shell.script is not None:  # before the path: it's what a truncated footer should keep
+            sc = shell.script
+            out += [sep, ("class:status.accent", sc.name), ("class:status.dim", f" {min(sc.pos + 1, len(sc.chunks))}/{len(sc.chunks)}" if not sc.done else " end")]
         if sandbox is not None and sandbox.contains(cwd):
             rel = os.path.relpath(os.path.realpath(cwd), sandbox.root)
             out += [sep, ("class:status.accent", "sandbox"), ("class:status", "" if rel == "." else f"/{rel}")]
         else:
-            out += [sep, ("class:status", fit_path(short_path(cwd), max(24, self.app.output.get_size().columns // 3)))]
+            out += [sep, ("class:status", fit_path(short_path(cwd), max(16, self.app.output.get_size().columns // 5)))]
         if shell.last_status is not None:
             ok = shell.last_status == 0
             out += [sep, ("class:status.ok", "✓ ") if ok else ("class:status.err", "✗ "), ("class:status", f"exit {shell.last_status}")]
             if shell.last_duration is not None:
                 out += [("class:status.dim", f" {format_duration(shell.last_duration)}")]
-        if shell.script is not None:
-            s = shell.script
-            out += [sep, ("class:status.accent", s.name), ("class:status.dim", f" {min(s.pos + 1, len(s.chunks))}/{len(s.chunks)}" if not s.done else " end")]
         if shell.settings.tty:
             out += [sep, ("class:status.dim", "tty")]
         if shell.settings.lint and lint.shellcheck_path() is None:
             out += [sep, ("class:status.dim", "no shellcheck")]
+        return out
+
+    def _footer(self) -> StyleAndTextTuples:
         width = self.app.output.get_size().columns - 1
-        return out if _width(out) <= width else _truncate(out, width)
+        left = [("", "  "), *self._footer_left(width - 4)]
+        if _width(left) > width:
+            return _truncate(left, width)
+        right = self._status()
+        room = width - _width(left) - 2
+        if room < 8:
+            return left
+        if _width(right) > room:
+            right = _truncate(right, room)
+        return [*left, ("", " " * (width - _width(left) - _width(right))), *right]
 
     # ── keys ──────────────────────────────────────────────────────────────
 
@@ -460,14 +462,26 @@ class Repl:
                 event.app.vi_state.input_mode = InputMode.NAVIGATION
                 b.cursor_position += b.document.get_cursor_left_position()
 
+        @kb.add("?", filter=focused & insert_mode & Condition(lambda: not self.buffer.text))
+        def _shortcuts(event: KeyPressEvent) -> None:
+            self.show_shortcuts = not self.show_shortcuts
+            self._keep_shortcuts = True
+
         @kb.add("c-c", filter=focused)
         def _ctrl_c(event: KeyPressEvent) -> None:
             b = event.current_buffer
             if b.text:
                 b.reset()
-            else:
-                self.flash = ("press ctrl+d to exit", time.monotonic() + 2.5)
-                event.app.invalidate()
+                return
+            now = time.monotonic()
+            if now < self.exit_armed_until:
+                event.app.exit(result=None)
+                return
+            self.exit_armed_until = now + EXIT_WINDOW
+            self.flash = ("Press Ctrl-C again to exit", self.exit_armed_until)
+            timer = threading.Timer(EXIT_WINDOW, event.app.invalidate)  # take the notice down on time
+            timer.daemon = True
+            timer.start()
 
         @kb.add("c-d", filter=focused & Condition(lambda: not self.buffer.text))
         def _ctrl_d(event: KeyPressEvent) -> None:

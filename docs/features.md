@@ -6,14 +6,12 @@ Everything you type runs in **one long-lived shell process** (bash by default), 
 
 ```text
 > for f in *.log; do grep -c ERROR "$f"; done
-│
-│ 3
-│ 0
-│
-╰─ ✓ exit 0 · 12ms · ~/project
+  ⎿  3
+     0
+     ✓ exit 0 · 12ms · ~/project
 ```
 
-- Output appears on the rail as it's printed. **stderr** gets a red rail and text, so you can tell the streams apart.
+- Output appears under the `⎿` as it's printed. **stderr** is shown in red, so you can tell the streams apart.
 - The footer shows the **exit status** (`✓ exit 0`, `✗ exit 2`, `✗ interrupted · exit 130`), how long the cell took and the **directory** the shell is in afterwards.
 - Cells slower than a quarter second show a spinner until they print or ask for input.
 - `$?` at the start of a cell is the previous cell's exit status.
@@ -24,14 +22,14 @@ Everything you type runs in **one long-lived shell process** (bash by default), 
 `exit`, `exec cmd`, a failing command under `set -e`, or a crash end the shell process. shtick reports it —
 
 ```text
-╰─ ✗ shell exited · exit 1 · 3ms · session restarted, state lost
+     ✗ shell exited · exit 1 · 3ms · session restarted, state lost
 ```
 
 — and starts a new session in the same directory. Variables, functions and options from before are gone. `%restart` does the same on purpose.
 
 ### Input while a cell runs
 
-A running cell can read from you: type a line and press Enter (`read`, `cat`, a script asking for confirmation). What you type shows on the rail in the accent color; Backspace and Ctrl+U edit the line; **Ctrl+D** ends the cell's input (`cat` finishes). Cells that don't read never see what you type. What you typed is kept with the cell, so `%test` and saved tests give the cell the same input again.
+A running cell can read from you: type a line and press Enter (`read`, `cat`, a script asking for confirmation). What you type shows in the cell's output in the accent color; Backspace and Ctrl+U edit the line; **Ctrl+D** ends the cell's input (`cat` finishes). Cells that don't read never see what you type. What you typed is kept with the cell, so `%test` and saved tests give the cell the same input again.
 
 A `%command` on its own line after shell code runs as its own step, so `shtick -c` and pasted snippets can mix both (lines inside a heredoc are left alone).
 

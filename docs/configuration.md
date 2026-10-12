@@ -17,7 +17,7 @@ Every setting is optional. This example shows each one with its default:
 theme = "tide"                          # tide · phosphor · chalk (for light terminals)
 editing_mode = "emacs"                  # emacs · vi
 shell = "bash"                          # bash · sh · dash · zsh · a path like "/bin/bash"
-lint = true                             # live shellcheck hint in the key bar (when shellcheck is installed)
+lint = true                             # live shellcheck hint in the footer (when shellcheck is installed)
 lint_exclude = ["SC2034", "SC2154"]     # checks skipped for cells (they see variables from other cells)
 tty = false                             # run cells attached to a pseudo-terminal (%tty)
 save_shebang = ""                       # %save's first line; "" picks #!/usr/bin/env <shell>
@@ -105,4 +105,4 @@ Since cells and checks are comments, the file is also a valid script, and it's e
 | `phosphor` | amber on dark, like an old CRT terminal |
 | `chalk` | for terminals with a light background |
 
-The same palette colors the input, cell output, the key bar and syntax highlighting.
+The same palette colors the input, cell output, the footer and syntax highlighting.

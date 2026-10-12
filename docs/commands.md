@@ -25,7 +25,7 @@ Settings are described in docs/configuration.md.
 Switch key bindings: %vi · %emacs · %editmode vi|emacs [--save].
 
 ```text
-vi: Esc for normal mode (shown as [NORMAL] in the mode line), Enter runs from normal mode,
+vi: Esc for normal mode (the footer's -- INSERT -- goes away, as in vim), Enter runs from normal mode,
 v opens the cell in $EDITOR, / searches history, j/k move through history.
 --save keeps the choice in config.toml; shtick --vi starts in vi mode once.
 ```
@@ -174,7 +174,7 @@ Shellcheck report for the last cell, a file, or the open script: %lint [FILE | s
 %lint FILE      a file
 %lint script    the open script
 
-While typing, the most important finding is shown in the key bar (%config lint=off to hide it).
+While typing, the most important finding is shown in the footer under the prompt (%config lint=off to hide it).
 Codes in the lint_exclude setting are skipped (cells often use variables set in other cells).
 ```
 

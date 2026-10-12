@@ -1,7 +1,8 @@
-"""Cell output on a left rail (│ for stdout, a red │ for stderr), plus a live 'running' spinner."""
+"""Cell output hanging under a `⎿` marker (querky's style), plus a live 'running' spinner."""
 
 from __future__ import annotations
 
+import io
 import re
 import threading
 import time
@@ -10,7 +11,28 @@ from typing import Callable, TextIO
 from prompt_toolkit.utils import get_cwidth
 
 _SPLIT = re.compile(r"(\r\n|\n|\r)")
-FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+FRAMES = ("·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢")
+FIRST = "  ⎿  "
+REST = "     "
+_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+class Marker:
+    """Hands out line prefixes for one block: `  ⎿  ` for the first visible line, five spaces after."""
+
+    def __init__(self, first: str = FIRST):
+        self.first = first  # possibly styled (ANSI)
+        self.used = False
+
+    def take(self) -> str:
+        prefix = REST if self.used else self.first
+        self.used = True
+        return prefix
+
+    def take_plain(self) -> str:
+        prefix = REST if self.used else FIRST
+        self.used = True
+        return prefix
 
 
 def format_duration(seconds: float) -> str:
@@ -27,8 +49,8 @@ def format_duration(seconds: float) -> str:
 class RailState:
     """Shared between stdout and stderr so both agree on where the cursor is."""
 
-    def __init__(self, prefixes: dict[str, str], text_styles: dict[str, tuple[str, str]] | None = None):
-        self.prefixes = prefixes  # stream → ANSI rail
+    def __init__(self, marker: Marker, text_styles: dict[str, tuple[str, str]] | None = None):
+        self.marker = marker
         self.text_styles = text_styles or {}  # stream → (ANSI start, ANSI reset) around the text
         self.at_line_start = True
         self.stream: str | None = None  # the stream that owns the current (unfinished) line
@@ -87,7 +109,7 @@ class Spinner:
 class Rail:
     """Writes stream text from a running cell with a rail in front of every line."""
 
-    def __init__(self, real: TextIO, state: RailState, spinner: Spinner | None = None, spacer: bool = True):
+    def __init__(self, real: TextIO, state: RailState, spinner: Spinner | None = None, spacer: bool = False):
         self.real = real
         self.state = state
         self.spinner = spinner
@@ -97,14 +119,13 @@ class Rail:
         if not s:
             return
         st = self.state
-        prefix = st.prefixes.get(stream, "")
         start, reset = st.text_styles.get(stream, ("", ""))
         with st.lock:
             if self.spinner:
                 self.spinner.clear()
             out: list[str] = []
             if self.spacer and not st.wrote:
-                out.append(st.prefixes["out"].rstrip() + "\n")  # breathing room below the echoed code
+                out.append("\n")  # breathing room below the echoed code
             if not st.at_line_start and st.stream != stream:
                 out.append("\n")  # the other stream had an unfinished line: don't glue onto it
                 st.at_line_start = True
@@ -112,8 +133,6 @@ class Rail:
                 if not piece:
                     continue
                 if piece in ("\n", "\r\n"):
-                    if st.at_line_start:
-                        out.append(prefix.rstrip())
                     out.append("\n")
                     st.at_line_start = True
                 elif piece == "\r":
@@ -121,7 +140,7 @@ class Rail:
                     st.at_line_start = True
                 else:
                     if st.at_line_start:
-                        out.append(prefix)
+                        out.append(st.marker.take())
                         st.at_line_start = False
                     out.append(start + piece + reset if start else piece)
             st.stream = stream
@@ -138,7 +157,7 @@ class Rail:
                 self.real.write("\n")
                 st.at_line_start = True
             if st.wrote and self.spacer:
-                self.real.write(st.prefixes["out"].rstrip() + "\n")  # breathing room above the footer
+                self.real.write("\n")  # breathing room above the footer
             self.real.flush()
 
 
@@ -150,9 +169,8 @@ class LineInput:
     edit, Enter sends the line, and Ctrl+D ends the cell's stdin (or sends a partial line, like a
     terminal does)."""
 
-    def __init__(self, rail: Rail, prefix: str, style: tuple[str, str]):
+    def __init__(self, rail: Rail, style: tuple[str, str]):
         self.rail = rail
-        self.prefix = prefix  # ANSI rail for lines that start with input
         self.start, self.reset = style
         self.line = ""
         self._pending = b""
@@ -179,13 +197,11 @@ class LineInput:
                 self.rail.spinner.stop()
                 self.rail.spinner.enabled = False  # the cell is interactive: no spinner over the input
             if self.rail.spacer and not st.wrote:
-                out.write(st.prefixes["out"].rstrip() + "\n")
+                out.write("\n")
                 st.wrote = True
             for ch in text:
                 if ch in "\r\n":
                     forward += (self.line + "\n").encode()
-                    if st.at_line_start:
-                        out.write(self.prefix.rstrip())
                     out.write("\n")
                     self.line = ""
                     st.at_line_start = True
@@ -204,7 +220,7 @@ class LineInput:
                     self.line = ""
                 elif ch == "\t" or ch >= " " and ch != "\x7f":
                     if st.at_line_start:
-                        out.write(self.prefix)
+                        out.write(st.marker.take())
                         st.at_line_start = False
                     st.stream = "in"
                     self.line += ch
@@ -212,3 +228,65 @@ class LineInput:
                 # other control keys and escape sequences aren't text input
             out.flush()
         return forward, eof
+
+
+class BlockWriter(io.TextIOBase):
+    """A console file for %command output: lines hang under the block's marker.
+
+    `dedent` drops that many leading spaces, since command output was written to sit two
+    columns in on its own. Escape-only writes (clearing a line) pass through untouched."""
+
+    def __init__(self, real: TextIO, marker: Marker, dedent: int = 2):
+        self.real = real
+        self.marker = marker
+        self.dedent = dedent
+        self.at_line_start = True
+
+    def write(self, s: str) -> int:
+        out: list[str] = []
+        for piece in _SPLIT.split(s):
+            if not piece:
+                continue
+            if piece in ("\n", "\r\n", "\r"):
+                out.append(piece)
+                self.at_line_start = True
+                continue
+            if self.at_line_start and _ESCAPE.sub("", piece).strip(" "):
+                escapes = re.match(rf"(?:{_ESCAPE.pattern})*", piece).group()
+                out.append(escapes + self.marker.take() + self._dedent(piece[len(escapes):]))
+                self.at_line_start = False
+            else:
+                out.append(piece)
+        self.real.write("".join(out))
+        return len(s)
+
+    def _dedent(self, line: str) -> str:
+        """Drop up to `dedent` leading spaces, even when colour codes are mixed in with them."""
+        kept: list[str] = []
+        removed = i = 0
+        while i < len(line) and removed < self.dedent:
+            if m := _ESCAPE.match(line, i):
+                kept.append(m.group())
+                i = m.end()
+            elif line[i] == " ":
+                removed += 1
+                i += 1
+            else:
+                break
+        return "".join(kept) + line[i:]
+
+    def flush(self) -> None:
+        self.real.flush()
+
+    def isatty(self) -> bool:
+        return self.real.isatty()
+
+    def fileno(self) -> int:
+        return self.real.fileno()
+
+    def writable(self) -> bool:
+        return True
+
+    @property
+    def encoding(self) -> str:  # type: ignore[override]
+        return getattr(self.real, "encoding", "utf-8")

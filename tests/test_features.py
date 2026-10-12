@@ -39,7 +39,7 @@ def run(shell, *cells):
 def test_block_shows_output_and_footer(shell, capfd):
     cell = run(shell, 'echo out; echo err >&2; sh -c "exit 2"')
     out = capfd.readouterr().out
-    assert "> echo out" in out and "│ out" in out and "│ err" in out
+    assert "> echo out" in out and "\n  ⎿  out\n     err\n" in out
     assert "✗ exit 2" in out
     assert cell.result.stdout == "out\n" and cell.result.stderr == "err\n"
     assert shell.last_status == 2
@@ -464,7 +464,7 @@ def test_watch_runs_the_script_in_a_new_process(shell, tmp_path, capfd):
     run(shell, "keep=1")
     shell.run_cell("%watch w.sh hello --runs 1")
     out = capfd.readouterr().out
-    assert "> bash w.sh hello" in out and "│ run with hello" in out and "✗ exit 3" in out
+    assert "> bash w.sh hello" in out and "  ⎿  run with hello" in out and "✗ exit 3" in out
     assert "stopped watching w.sh after 1 runs" in out
     assert run(shell, 'echo "keep=$keep"').result.stdout == "keep=1\n"  # the session survived the script's exit
 

@@ -70,3 +70,14 @@ def test_closer_finds_its_opener():
     text = "for a in 1; do\n  for b in 2; do\n    echo\n  done\n    done"
     assert dedent_closer(_doc(text)).text.endswith("\n  done\ndone")
     assert dedent_closer(_doc("if x; then\n  echo\n  else")).text.endswith("\nelse")
+
+
+def test_command_output_hangs_under_the_marker_and_keeps_its_alignment():
+    import io
+
+    from shtick.output import BlockWriter, Marker
+
+    real = io.StringIO()
+    w = BlockWriter(real, Marker())
+    w.write("  \x1b[1m▸\x1b[0m 1  one\n \x1b[2m \x1b[0m  2  two\n\n  three\n")
+    assert real.getvalue() == "  ⎿  \x1b[1m▸\x1b[0m 1  one\n     \x1b[2m\x1b[0m  2  two\n\n     three\n"
