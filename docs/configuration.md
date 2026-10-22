@@ -14,7 +14,7 @@
 Every setting is optional. This example shows each one with its default:
 
 ```toml
-theme = "tide"                          # tide · phosphor · chalk (for light terminals)
+theme = "pitch"                         # the only theme for now
 editing_mode = "emacs"                  # emacs · vi
 shell = "bash"                          # bash · sh · dash · zsh · a path like "/bin/bash"
 lint = true                             # live shellcheck hint in the footer (when shellcheck is installed)
@@ -25,7 +25,7 @@ startup = []                            # shell lines run in every new session, 
 aliases = ""                            # import your aliases: "auto" ($SHELL), "zsh" or "bash"; "" is off
 ```
 
-Inside shtick, `%config` lists the current values and `%config name=value` changes one for the session (`%config lint=off`, `%config shell=dash`, `%config theme=matrix`). Add `--save` to also write it to `config.toml` — other lines and comments in the file are kept. `%vi --save` does the same for vi mode. Settings with a problem are reported as warnings at startup instead of stopping shtick.
+Inside shtick, `%config` lists the current values and `%config name=value` changes one for the session (`%config lint=off`, `%config shell=dash`, `%config editing_mode=vi`). Add `--save` to also write it to `config.toml` — other lines and comments in the file are kept. `%vi --save` does the same for vi mode. Settings with a problem are reported as warnings at startup instead of stopping shtick.
 
 `startup` lines also run after `%restart`, `%shell` and when a session had to be restarted because the shell exited.
 
@@ -61,7 +61,7 @@ shtick [SCRIPT [ARGS…]]      interactive; with SCRIPT, open it to step through
   -c CODE                    run CODE as a cell, print the block, exit with the cell's status
   -s, --shell SHELL          bash (default), sh, dash, zsh or a path
   --profile NAME             separate config and history
-  --theme tide|phosphor|chalk
+  --theme pitch
   --vi                       vi key bindings
   --version
 
@@ -99,10 +99,6 @@ Since cells and checks are comments, the file is also a valid script, and it's e
 
 ## Themes
 
-| Theme | Look |
-| --- | --- |
-| `tide` | blue-black bar, teal accent, lime and amber highlights (default) |
-| `phosphor` | amber on dark, like an old CRT terminal |
-| `chalk` | for terminals with a light background |
+One palette, `pitch`: cool blue/violet hues on a pitch-black terminal, the same palette as ember, cinder, flare and lore, with shtick's own cyan accent. Backgrounds stay transparent, so the terminal's own black shows through.
 
 The same palette colors the input, cell output, the footer and syntax highlighting.

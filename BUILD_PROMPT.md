@@ -37,7 +37,7 @@ shtick is ember's sibling and should look and feel like it. ember is an interact
 | --- | --- |
 | `src/ember/ui.py` | The **block layout**: full-width filled input bar with placeholder and counter, context-aware `LABEL: Key` key bar, `[INSERT]/[NORMAL]` mode line, completion menu, vi/emacs modes, Shift+Enter support via xterm modifyOtherKeys (+ the escape-sequence registration), `patch_stdout` so background output appears above the prompt, smart Enter |
 | `src/ember/banner.py` | Pixel wordmark from half-block characters. Draw `SHTICK_` — you'll need 5×7 glyphs for S, H, T, I, C, K |
-| `src/ember/theme.py` | Palettes shared by prompt_toolkit, Rich and Pygments; the three themes (void, nebula, matrix) |
+| `src/ember/theme.py` | Palettes shared by prompt_toolkit, Rich and Pygments; the pitch palette |
 | `src/ember/output.py` | The output **rail** (`│`) writer and the spinner for slow cells |
 | `src/ember/shell.py` | Cell echo and footer chrome (`╰─ ✓ 2.8ms · …`), spacing between blocks |
 | `src/ember/history.py` | SQLite history by session + prompt_toolkit history adapter |

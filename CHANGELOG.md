@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **pitch**, one palette shared by ember, shtick, cinder, flare and lore: cool blue/violet hues on the terminal's own black. Backgrounds stay transparent, completion menus included (the current item is bold instead of shaded). shtick's accent is cyan. The `tide`, `phosphor` and `chalk` themes (and their screenshots) are gone; a config that still names one falls back to pitch with a warning.
+
 ## 0.2.0
 
 - **A new look**, in querky's style: the input sits between two horizontal rules, with a one-line footer under them instead of the filled bar, key bar and mode line. The left side shows the flag hint or the shellcheck finding while you type, `%next · %step · %run` while a script is open, `-- INSERT --` in vi mode, or `? for shortcuts`; the right side shows the next cell's `[N]` and the session status. `?` on an empty prompt lists the shortcuts, and completions are a plain list under the prompt.

@@ -1,4 +1,4 @@
-"""Color palettes shared by the prompt (prompt_toolkit), output (rich) and syntax (pygments)."""
+"""The color palette shared by the prompt (prompt_toolkit), output (rich) and syntax (pygments)."""
 
 from __future__ import annotations
 
@@ -56,93 +56,38 @@ class Palette:
 
 
 PALETTES: dict[str, Palette] = {
-    # Blue-black with a teal accent, lime and amber highlights. The default.
-    "tide": Palette(
-        name="tide",
-        fg="#d8e2ec",
-        muted="#8a9aab",
-        faint="#56657a",
-        border="#2e3a4a",
-        surface="#111821",
-        selection="#22303f",
-        bar="#1b2430",
-        label="#f2c46d",
-        accent="#3ddbc4",
-        accent2="#a6e36e",
-        ok="#7ee787",
-        err="#ff7b72",
-        warn="#f2c46d",
-        info="#79c0ff",
-        stderr="#ffa8a1",
-        keyword="#3ddbc4",
-        builtin="#79c0ff",
-        function="#e6edf3",
-        klass="#f2c46d",
-        string="#a6e36e",
-        number="#d2a8ff",
-        comment="#5c6b7d",
-        operator="#93a4b8",
-        decorator="#d2a8ff",
-    ),
-    # Amber on dark, like an old CRT terminal.
-    "phosphor": Palette(
-        name="phosphor",
-        fg="#ffdcaa",
-        muted="#b88f56",
-        faint="#7d5f36",
-        border="#4a3720",
-        surface="#1a1208",
-        selection="#33240f",
-        bar="#261b0c",
-        label="#ffd166",
-        accent="#ffb000",
-        accent2="#ff7a1a",
-        ok="#c5e063",
-        err="#ff5f45",
-        warn="#ffd166",
-        info="#ffcc80",
-        stderr="#ff9e80",
-        keyword="#ffb000",
-        builtin="#ffcc80",
-        function="#ffe8c7",
-        klass="#ff7a1a",
-        string="#e3c27d",
-        number="#ff9e40",
-        comment="#7d5f36",
-        operator="#c79a5a",
-        decorator="#ff7a1a",
-    ),
-    # For light terminal backgrounds.
-    "chalk": Palette(
-        name="chalk",
-        fg="#1f2328",
-        muted="#57606a",
-        faint="#8c959f",
-        border="#c9d1d9",
-        surface="#f6f8fa",
-        selection="#d8e6f5",
-        bar="#eaeef2",
-        label="#8250df",
-        accent="#0a7f73",
-        accent2="#bf5700",
-        ok="#1a7f37",
-        err="#cf222e",
-        warn="#9a6700",
-        info="#0969da",
-        stderr="#a40e26",
-        keyword="#cf222e",
-        builtin="#0969da",
-        function="#1f2328",
-        klass="#8250df",
-        string="#0a3069",
-        number="#953800",
-        comment="#6e7781",
-        operator="#57606a",
-        decorator="#8250df",
+    # pitch: cool blue/violet hues on a pitch-black terminal, shared by all the tools;
+    # each one gets its own accent (shtick's is cyan).
+    "pitch": Palette(
+        name="pitch",
+        fg="#c0caf5",
+        muted="#737aa2",
+        faint="#565f89",
+        border="#2a2e42",
+        surface="#0b0d14",
+        selection="#161925",
+        bar="#161925",
+        label="#bb9af7",
+        accent="#7dcfff",
+        accent2="#73daca",
+        ok="#9ece6a",
+        err="#f7768e",
+        warn="#e0af68",
+        info="#7aa2f7",
+        stderr="#f7768e",
+        keyword="#bb9af7",
+        builtin="#7dcfff",
+        function="#7aa2f7",
+        klass="#73daca",
+        string="#9ece6a",
+        number="#ff9e64",
+        comment="#565f89",
+        operator="#a9b1d6",
+        decorator="#e0af68",
     ),
 }
 
-DEFAULT_THEME = "tide"
+DEFAULT_THEME = "pitch"
 
 
 class Theme:

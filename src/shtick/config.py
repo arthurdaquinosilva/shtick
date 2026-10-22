@@ -15,7 +15,7 @@ EDITING_MODES = ("emacs", "vi")
 
 @dataclass
 class Settings:
-    theme: str = "tide"
+    theme: str = "pitch"
     editing_mode: str = "emacs"
     shell: str = "bash"
     lint: bool = True  # live shellcheck while typing, when shellcheck is installed

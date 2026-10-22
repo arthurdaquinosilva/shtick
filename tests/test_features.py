@@ -305,8 +305,8 @@ def test_tty_mode(shell, capfd):
 
 
 def test_config(shell, capfd):
-    shell.run_cell("%config theme=phosphor")
-    assert shell.theme.name == "phosphor"
+    shell.run_cell("%config theme=pitch")
+    assert shell.theme.name == "pitch"
     shell.run_cell("%config nope=1")
     assert "unknown setting" in capfd.readouterr().out
 
