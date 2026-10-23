@@ -7,7 +7,7 @@
 **A playground for writing and testing shell scripts.**
 Run shell code cell by cell in a persistent session, step through scripts, trace them, lint them, compare shells, sandbox them and assert on the results.
 
-[![PyPI](https://img.shields.io/pypi/v/shtick)](https://pypi.org/project/shtick/)
+[![release](https://img.shields.io/github/v/tag/arthurdaquinosilva/shtick?label=release)](https://github.com/arthurdaquinosilva/shtick/tags)
 [![tests](https://github.com/arthurdaquinosilva/shtick/actions/workflows/tests.yml/badge.svg)](https://github.com/arthurdaquinosilva/shtick/actions/workflows/tests.yml)
 [![python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://github.com/arthurdaquinosilva/shtick/blob/main/pyproject.toml)
 [![license](https://img.shields.io/badge/license-MIT-green)](https://github.com/arthurdaquinosilva/shtick/blob/main/LICENSE)
@@ -38,18 +38,9 @@ The name: **sh** + **tick** (✓, a passing check) — and a *shtick* is a routi
 curl -fsSL https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/install.sh | sh
 ```
 
-The script puts shtick in its own virtual environment (`~/.local/share/shtick/venv`) and links the `shtick` command into `~/.local/bin`, telling you if that isn't on your `PATH`. Run it again to upgrade; add `-s -- 0.1.1` after `sh` for a specific version, or `-s -- --uninstall` to remove it (your config and history stay). [Read it first](https://github.com/arthurdaquinosilva/shtick/blob/main/install.sh) if you like — it's short.
+The script downloads shtick from GitHub into its own virtual environment (`~/.local/share/shtick/venv`) and links the `shtick` command into `~/.local/bin`, telling you if that isn't on your `PATH`. Run it again to upgrade to the latest code on `main`; add `-s -- 0.1.1` after `sh` for a specific release, or `-s -- --uninstall` to remove it (your config and history stay). [Read it first](https://github.com/arthurdaquinosilva/shtick/blob/main/install.sh) if you like — it's short.
 
-Or with a Python package manager:
-
-```sh
-pipx install shtick     # the `shtick` command everywhere, isolated from your projects
-pip install shtick      # or into the current environment
-```
-
-To try the latest unreleased code: `pipx install git+https://github.com/arthurdaquinosilva/shtick.git`.
-
-Then run `shtick`. Requires Python 3.10+ on macOS or Linux, and bash. [shellcheck](https://www.shellcheck.net) is optional but recommended (`brew install shellcheck`, `apt install shellcheck`); dash and zsh are used when installed.
+shtick isn't on PyPI; GitHub is the only place it's published. Then run `shtick`. Requires Python 3.10+ on macOS or Linux, and bash. [shellcheck](https://www.shellcheck.net) is optional but recommended (`brew install shellcheck`, `apt install shellcheck`); dash and zsh are used when installed.
 
 ## Quick tour
 
@@ -92,7 +83,7 @@ Shift+Enter needs a terminal that reports modified keys (iTerm2, WezTerm, Ghostt
 | [Command reference](https://github.com/arthurdaquinosilva/shtick/blob/main/docs/commands.md) | Every `%command` with its options (generated from the code) |
 | [Configuration](https://github.com/arthurdaquinosilva/shtick/blob/main/docs/configuration.md) | `config.toml`, themes, profiles, command-line options, test files |
 | [How it works](https://github.com/arthurdaquinosilva/shtick/blob/main/docs/how-it-works.md) | The session engine: how cells run, finish, read input and get interrupted |
-| [Releasing](https://github.com/arthurdaquinosilva/shtick/blob/main/docs/releasing.md) | How versions are published to PyPI |
+| [Releasing](https://github.com/arthurdaquinosilva/shtick/blob/main/docs/releasing.md) | How versions are tagged and released on GitHub |
 
 ## Command line
 

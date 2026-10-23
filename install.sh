@@ -1,15 +1,15 @@
 #!/bin/sh
-# Install shtick into its own virtual environment and put the `shtick` command on your PATH.
+# Install shtick from GitHub into its own virtual environment and put the `shtick` command on your PATH.
 #
 #   curl -fsSL https://raw.githubusercontent.com/arthurdaquinosilva/shtick/main/install.sh | sh
 #   curl -fsSL .../install.sh | sh -s -- 0.1.1         # a specific version
 #   curl -fsSL .../install.sh | sh -s -- --uninstall   # remove it again
 #
-# Running it again upgrades to the latest release. Settings (environment variables):
+# Running it again upgrades to the latest code on main. Settings (environment variables):
 #   SHTICK_VENV     where the virtual environment lives   (default: ~/.local/share/shtick/venv)
 #   SHTICK_BIN_DIR  where the `shtick` link goes           (default: ~/.local/bin)
 #   SHTICK_PYTHON   the Python to use                      (default: the newest python3 >= 3.10 found)
-#   SHTICK_PACKAGE  what pip installs, e.g. a git URL or a local checkout (default: shtick from PyPI)
+#   SHTICK_PACKAGE  what pip installs, e.g. a local checkout (default: shtick's source archive on GitHub)
 #
 # Everything is inside main(), so a download cut short runs nothing.
 
@@ -26,7 +26,7 @@ main() {
         case $arg in
             --uninstall) uninstall=1 ;;
             -h|--help) usage; return 0 ;;
-            latest) version="" ;;
+            latest|main) version="" ;;
             -*) die "unknown option: $arg (see --help)" ;;
             *) version=${arg#v} ;;
         esac
@@ -49,12 +49,13 @@ main() {
 Or point SHTICK_PYTHON at one and run this again."
     say "Using $python ($("$python" -c 'import sys; print(sys.version.split()[0])'))"
 
+    # A source archive from GitHub, so neither git nor a package index is needed.
     if [ -n "${SHTICK_PACKAGE:-}" ]; then
         package=$SHTICK_PACKAGE
     elif [ -n "$version" ]; then
-        package="shtick==$version"
+        package="shtick @ https://github.com/arthurdaquinosilva/shtick/archive/refs/tags/v$version.tar.gz"
     else
-        package="shtick"
+        package="shtick @ https://github.com/arthurdaquinosilva/shtick/archive/refs/heads/main.tar.gz"
     fi
 
     if [ ! -x "$venv/bin/python" ] || ! "$venv/bin/python" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
@@ -67,7 +68,8 @@ Or point SHTICK_PYTHON at one and run this again."
 
     say "Installing $package"
     "$venv/bin/python" -m pip install --quiet --disable-pip-version-check --upgrade pip >/dev/null 2>&1 || true
-    "$venv/bin/python" -m pip install --quiet --disable-pip-version-check --upgrade "$package" \
+    # --force-reinstall: the main archive keeps its URL while its contents change.
+    "$venv/bin/python" -m pip install --quiet --disable-pip-version-check --upgrade --force-reinstall "$package" \
         || die "pip could not install $package."
 
     mkdir -p "$bin_dir"
@@ -90,9 +92,9 @@ usage() {
     cat <<'EOF'
 Install shtick, a playground for writing and testing shell scripts.
 
-usage: install.sh [VERSION | latest] [--uninstall]
+usage: install.sh [VERSION | main] [--uninstall]
 
-  VERSION        install this release (e.g. 0.1.1); default: the latest
+  VERSION        install this release (e.g. 0.1.1); default: the main branch
   --uninstall    remove shtick's virtual environment and the `shtick` link
 
 Environment: SHTICK_VENV, SHTICK_BIN_DIR, SHTICK_PYTHON, SHTICK_PACKAGE (see the top of this script).
